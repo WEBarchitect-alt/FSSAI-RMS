@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<!-- saved from url=(0035)https://fira.fssai.gov.in/index.php -->
+<html lang="en" class="csstransforms csstransforms3d csstransitions"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Food Import Rejection Alert (FIRA) Portal</title>
+	<link rel="stylesheet" href="./Food Import Rejection Alert (FIRA) Portal_files/daterangepicker-bs3.css">
+	<link rel="stylesheet" href="./Food Import Rejection Alert (FIRA) Portal_files/font-awesome.min.css">
+	<link href="./Food Import Rejection Alert (FIRA) Portal_files/bootstrap.min.css" rel="stylesheet">
+	<link href="./Food Import Rejection Alert (FIRA) Portal_files/dataTables.bootstrap.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        header {
+            background-color: #fde8a9;
+            color: #333;
+            padding: 1em 0;
+            text-align: center;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        header img {
+            height: 140px;
+        }
+        header h1 {
+            margin: 0;
+            flex-grow: 1;
+            text-align: center;
+        }
+        nav {
+            background-color: #85858c;
+            overflow: hidden;
+        }
+        nav a {
+            float: left;
+            display: block;
+            color: white;
+            text-align: center;
+            padding: 14px 30px;
+            text-decoration: none;
+			font-weight: bold;
+        }
+        nav a:hover {
+            background-color: #ddd;
+            color: black;
+        }
+        .background {
+            background-image: url('images/bckimg.jpg'); /* Local image */
+            background-size: cover;
+            background-position: center;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        section {
+            padding: 20px;
+            background-color: #ffffff;
+            margin: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #0056a6;
+            color: white;
+        }
+        .filter-container {
+            margin-bottom: 20px;
+        }
+        .filter-container label {
+            margin-right: 10px;
+        }
+        .details-link {
+            color: #0056a6;
+            text-decoration: none;
+        }
+        .details-link:hover {
+            text-decoration: underline;
+        }
+        footer {
+            background-color: #333;
+            color: white;
+            text-align: center;
+            padding: 1em 0;
+            /*position: fixed;*/
+            width: 100%;
+            bottom: 0;
+        }
+        .login-button {
+            background-color: #0056a6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 10px 2px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        .login-button:hover {
+            background-color: #003f7d;
+        }
+        .welcome-section {
+            background-color: rgba(255, 255, 255, 0.8); /* Slightly translucent */
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+		.daterangepicker .calendar {
+		max-width: none !important;
+		}
+    </style>
+	
+</head>
+<body>
+
+<header>
+    <img src="./Food Import Rejection Alert (FIRA) Portal_files/fssai_logo.png" alt="FSSAI Logo" style="flex-grow: 0; margin-left: 10px;">
+    <h1 style="font-style: italic;font-family: initial;font-weight: bold;color: #0056A6;">Food Import Rejection Alert (FIRA) Portal</h1>
+    <img src="./Food Import Rejection Alert (FIRA) Portal_files/gfrs.png" alt="GFRS Logo" style="flex-grow: 0; margin-right: 10px;">
+</header>
+
+<nav>
+    <a href="https://fira.fssai.gov.in/index.php">Home</a>
+    <a href="https://fira.fssai.gov.in/index.php#alerts">Alerts</a>
+	<a href="https://fira.fssai.gov.in/archives.php">Archives</a>
+	<a href="https://fira.fssai.gov.in/adminpanel/" target="_blank">Login</a>
+</nav>
+<section class="background">
+    <div class="welcome-section" style="color:#0056A6;">
+        <h2>Welcome to FIRA</h2>
+        <h3>A Digital System for Exchange of information on food import rejections</h3>
+        <ul style="font-size:18px;">
+            <li>Rapid exchange of information amongst authorities worldwide on food safety &amp; health risks derived from rejected food;</li>
+            <li>Enables relevant food authorities/stakeholders to take immediate action for prevention &amp; control of risk before it causes harm;</li>
+            <li>Online interactive interface for rapid dissemination of information to ensure enhanced traceability &amp; transparency; </li>
+			<li>Serves as a valuable database for tracking rejected food products and further strengthening of the Risk Management System (RMS). </li>
+        </ul>
+        <!--<button class="login-button" onClick="location.href='login.html'">Authority Login</button>!-->
+    </div>
+</section>
+<section>
+<h4>Legal Basis: Regulation 11(7) of the Foood Safety and Standards(Import) Regulation, 2017 empowers the Food Authority to issue Food alert notification.</h4>
+</section>
+<section id="alerts">
+    <h2>Food Import Rejection Alerts</h2>
+	<form name="dateForm" method="post" action="https://fira.fssai.gov.in/index.php">
+	<div class="col-md-10">
+	<label for="country-filter" class="col-md-1">Country:</label>
+        <select id="country-filter" onchange="filterTable()" class="col-md-2" name="country">
+            <option value="">All</option>
+			            <option value="BANGLADESH">BANGLADESH</option>
+			            <option value="CHINA">CHINA</option>
+			            <option value="INDONESIA">INDONESIA</option>
+			            <option value="IRAN">IRAN</option>
+			            <option value="JAPAN">JAPAN</option>
+			            <option value="MALAYSIA">MALAYSIA</option>
+			            <option value="MYANMAR">MYANMAR</option>
+			            <option value="PERU">PERU</option>
+			            <option value="PHILIPPINES">PHILIPPINES</option>
+			            <option value="SERBIA">SERBIA</option>
+			            <option value="SOUTH KOREA">SOUTH KOREA</option>
+			            <option value="SRI LANKA">SRI LANKA</option>
+			            <option value="THAILAND">THAILAND</option>
+			            <option value="TURKEY">TURKEY</option>
+			            <option value="UNITED ARAB EMIRATES">UNITED ARAB EMIRATES</option>
+			            <option value="UNITED STATES">UNITED STATES</option>
+			            
+            <!-- Add more countries as needed, excluding India -->
+        </select>
+        <label for="reason-filter" class="col-md-1">Reason:</label>
+        <select id="reason-filter" onchange="filterTable()" class="col-md-2" name="reason">
+            <option value="">All</option>
+                       <option value="Artificial colour: Sunset Yellow (INS 110) above the prescribed limits.">Artificial colour: Sunset Yellow (INS 110) above the prescribed limits.</option>
+			            <option value="Balance shelf life is not sufficient (i.e., neither 60% of shelf life nor 3 months before expiry) thereby violating regulation 5(6) of the FSS(Import) Regulation,2017">Balance shelf life is not sufficient (i.e., neither 60% of shelf life nor 3 months before expiry) thereby violating regulation 5(6) of the FSS(Import) Regulation,2017</option>
+			            <option value="Containing non-permitted additive Stevia (INS 960)">Containing non-permitted additive Stevia (INS 960)</option>
+			            <option value="Damaged Nuts % by moulds and insects ; Moisture % more than the prescribed limits ">Damaged Nuts % by moulds and insects ; Moisture % more than the prescribed limits </option>
+			            <option value="Exceeds the prescribed limit for-
+Ash insoluble, Sunset Yellow and Tartrazine and contains “Saccharin”, which is not declared on the product label">Exceeds the prescribed limit for-
+Ash insoluble, Sunset Yellow and Tartrazine and contains “Saccharin”, which is not declared on the product label</option>
+			            <option value="exceeds the prescribed limit for- 
+Ash insoluble and contains “Saccharin”, which is not declared on the product label">exceeds the prescribed limit for- 
+Ash insoluble and contains “Saccharin”, which is not declared on the product label</option>
+			            <option value="exceeds the prescribed limit for- 
+Ash insoluble, Sunset Yellow and Tartrazine and contains “Saccharin” which is not declared on the product label">exceeds the prescribed limit for- 
+Ash insoluble, Sunset Yellow and Tartrazine and contains “Saccharin” which is not declared on the product label</option>
+			            <option value="Heavy Metal - Arsenic">Heavy Metal - Arsenic</option>
+			            <option value="Heavy Metal- Arsenic">Heavy Metal- Arsenic</option>
+			            <option value="Higher amount of Tartrazine">Higher amount of Tartrazine</option>
+			            <option value="Labelling Deficiencies: Batch No, Mandatory Declaration for artificial sweetener, Misleading product name
+Presence of non-permitted artificial sweetener: Sodium Cyclamate">Labelling Deficiencies: Batch No, Mandatory Declaration for artificial sweetener, Misleading product name
+Presence of non-permitted artificial sweetener: Sodium Cyclamate</option>
+			            <option value="Labelling deficiencies: Batch No, Mandatory Declaration for artificial sweetener, Misleading product name">Labelling deficiencies: Batch No, Mandatory Declaration for artificial sweetener, Misleading product name</option>
+			            <option value="Need prior product approval as it is not allowed as per FSS, Act, 2006 and Regulations made thereunder.">Need prior product approval as it is not allowed as per FSS, Act, 2006 and Regulations made thereunder.</option>
+			            <option value="Pesticides- Acetamiprid and Azoxystrobin">Pesticides- Acetamiprid and Azoxystrobin</option>
+			            <option value="pH value is less than the prescribed limit for Alcohol-free Beer">pH value is less than the prescribed limit for Alcohol-free Beer</option>
+			            <option value="Presence of Dead Insects/ Insect Fragments, Living Insects and Blemished/ Damaged units above the prescribed limit">Presence of Dead Insects/ Insect Fragments, Living Insects and Blemished/ Damaged units above the prescribed limit</option>
+			            <option value="Presence of Mould and Damaged/Discoloured units.">Presence of Mould and Damaged/Discoloured units.</option>
+			            <option value="Presence of non-permitted 'synthetic colour: Tartrazine'">Presence of non-permitted 'synthetic colour: Tartrazine'</option>
+			            <option value="Presence of visible mould ; Damaged nuts by moulds and insects ; blemished/cracked, broken, nuts not fully dehusked">Presence of visible mould ; Damaged nuts by moulds and insects ; blemished/cracked, broken, nuts not fully dehusked</option>
+			            <option value="Prior Product approval is required as 'Rooibos' is not listed as a permitted plant/botanical ingredient under the FSS Act,2006 and the regulations made thereunder">Prior Product approval is required as 'Rooibos' is not listed as a permitted plant/botanical ingredient under the FSS Act,2006 and the regulations made thereunder</option>
+			            <option value="Quality parameters">Quality parameters</option>
+			            <option value="Rejected due to higher amount of Aflatoxin- B1 (552.309 mg/Kg) above the limit 10 mg/Kg as per FSSR and higher limit of Total Aflatoxin (645.213) mg/Kg) above the limit 15 mg/Kg as per FSSR
+
+
+">Rejected due to higher amount of Aflatoxin- B1 (552.309 mg/Kg) above the limit 10 mg/Kg as per FSSR and higher limit of Total Aflatoxin (645.213) mg/Kg) above the limit 15 mg/Kg as per FSSR
+
+
+</option>
+			            <option value="Rejected due to Pesticide Spirodiclofen (0.121 mg/Kg) above the limit of 0.01 mg/Kg as per FSSR">Rejected due to Pesticide Spirodiclofen (0.121 mg/Kg) above the limit of 0.01 mg/Kg as per FSSR</option>
+			            <option value="Safety parameters">Safety parameters</option>
+			            <!-- Add more reasons as needed -->
+        </select>
+		<label for="reason-filter" class="col-md-2">Date of Notification:</label>
+        <input type="text" placeholder="Date Range" class="col-md-2" value="" id="reservation" autocomplete="off" name="dateRange" style="width:30%;">
+	  </div>
+		<div class="col-md-2"><input type="submit" class="btn btn-warning center form-control" name="submit" value="Search" id="btnhideid" style="background-color: #0056A6;border-color: #7da7ad;"></div>
+  </form>
+    <div class="filter-container"></div>
+	
+    <div id="alerts-table_wrapper" class="dataTables_wrapper form-inline dt-bootstrap no-footer"><div class="row"><div class="col-sm-2"><div class="dataTables_length" id="alerts-table_length"><label>Show <select name="alerts-table_length" aria-controls="alerts-table" class="form-control input-sm"><option value="10">10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select> entries</label></div></div><div class="col-sm-2"><div id="alerts-table_filter" class="dataTables_filter"><label>Search:<input type="search" class="form-control input-sm" placeholder="" aria-controls="alerts-table"></label></div></div></div><div class="row"><div class="col-sm-12"><table id="alerts-table" class="table table-bordered table-hover dataTable no-footer" role="grid" aria-describedby="alerts-table_info">
+        <thead>
+            <tr role="row"><th width="10%" class="sorting_asc" tabindex="0" aria-controls="alerts-table" rowspan="1" colspan="1" aria-sort="ascending" aria-label="Rejection ID: activate to sort column descending" style="width: 112.259px;">Rejection ID</th><th width="14%" class="sorting" tabindex="0" aria-controls="alerts-table" rowspan="1" colspan="1" aria-label="Product Category: activate to sort column ascending" style="width: 102.259px;">Product Category</th><th width="11%" class="sorting" tabindex="0" aria-controls="alerts-table" rowspan="1" colspan="1" aria-label="Product Name: activate to sort column ascending" style="width: 137.259px;">Product Name</th><th width="16%" class="sorting" tabindex="0" aria-controls="alerts-table" rowspan="1" colspan="1" aria-label="Country of Origin: activate to sort column ascending" style="width: 105.259px;">Country of Origin</th><th width="14%" class="sorting" tabindex="0" aria-controls="alerts-table" rowspan="1" colspan="1" aria-label="Exporting Country: activate to sort column ascending" style="width: 100.259px;">Exporting Country</th><th width="14%" class="sorting" tabindex="0" aria-controls="alerts-table" rowspan="1" colspan="1" aria-label="Reason for Rejection: activate to sort column ascending" style="width: 129.259px;">Reason for Rejection</th><th width="11%" class="sorting" tabindex="0" aria-controls="alerts-table" rowspan="1" colspan="1" aria-label="Date of Rejection: activate to sort column ascending" style="width: 81.2593px;">Date of Rejection</th><th width="14%" class="sorting" tabindex="0" aria-controls="alerts-table" rowspan="1" colspan="1" aria-label="Point of Rejection: activate to sort column ascending" style="width: 77.2593px;">Point of Rejection</th><th width="14%" class="sorting" tabindex="0" aria-controls="alerts-table" rowspan="1" colspan="1" aria-label="Stage of Alert : activate to sort column ascending" style="width: 38.2593px;">Stage of Alert </th><th width="10%" data-orderable="false" class="sorting_disabled" rowspan="1" colspan="1" aria-label="Details" style="width: 46px;">Details</th></tr>
+        </thead>
+        <tbody>
+            <!-- Example rows; these would be dynamically generated -->
+			            
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       
+                       <!-- Add more rows as needed, excluding India -->
+        <tr role="row" class="odd">
+                <td class="sorting_1">NCC202400000489</td>
+                <td>Health Supplements, Nutraceuticals</td>
+                <td>amino energy orange (Nutrition supplement)</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/us.png" alt="United States" width="20"> United States</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/us.png" alt="United States" width="20"> United States</td>
+                <td>Artificial colour: Sunset Yellow (INS 110) above the prescribed limits.				</td>
+                <td>03-01-2024</td>
+                <td>Mumbai-JNPT Nhava Sheva</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=NCC202400000489" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="even">
+                <td class="sorting_1">NCC202400021243</td>
+                <td>Spices and Condiments (2.9)</td>
+                <td>CINNAMON FLOWER BUD (DRY)</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/lk.png" alt="Sri Lanka" width="20"> Sri Lanka</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/lk.png" alt="Sri Lanka" width="20"> Sri Lanka</td>
+                <td>Need prior product approval as it is not allowed as per FSS, Act, 2006 and Regulations made thereunder.				</td>
+                <td>24-05-2024</td>
+                <td>BANGALORE</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=NCC202400021243" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="odd">
+                <td class="sorting_1">NCC202400040264</td>
+                <td>Health Supplements, Nutraceuticals</td>
+                <td>(TEA BAG) SH 10P</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/jp.png" alt="Japan" width="20"> Japan</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/jp.png" alt="Japan" width="20"> Japan</td>
+                <td>Prior Product approval is required as 'Rooibos' is not listed as a permitted plant/botanical ingredient under the FSS Act,2006 and the regulations made thereunder				</td>
+                <td>25-06-2024</td>
+                <td>BANGALORE</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=NCC202400040264" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="even">
+                <td class="sorting_1">NCC202400040265</td>
+                <td>Health Supplements, Nutraceuticals</td>
+                <td>(TEA BAG) SH 50P</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/jp.png" alt="Japan" width="20"> Japan</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/jp.png" alt="Japan" width="20"> Japan</td>
+                <td>Prior Product approval is required as 'Rooibos' is not listed as a permitted plant/botanical ingredient under the FSS Act,2006 and the regulations made thereunder				</td>
+                <td>25-06-2024</td>
+                <td>BANGALORE</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=NCC202400040265" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="odd">
+                <td class="sorting_1">NCC202400040266</td>
+                <td>Health Supplements, Nutraceuticals</td>
+                <td>(TEA BAG) SH 20P</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/jp.png" alt="Japan" width="20"> Japan</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/jp.png" alt="Japan" width="20"> Japan</td>
+                <td>Prior Product approval is required as 'Rooibos' is not listed as a permitted plant/botanical ingredient under the FSS Act,2006 and the regulations made thereunder				</td>
+                <td>25-06-2024</td>
+                <td>BANGALORE</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=NCC202400040266" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="even">
+                <td class="sorting_1">NCC202400062647</td>
+                <td>Fruits &amp; Vegetables Products(2.3)</td>
+                <td>FRESH APPLE RED DELICIOUS</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/tr.png" alt="Turkey" width="20"> Turkey</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/tr.png" alt="Turkey" width="20"> Turkey</td>
+                <td>Balance shelf life is not sufficient (i.e., neither 60% of shelf life nor 3 months before expiry) thereby violating regulation 5(6) of the FSS(Import) Regulation,2017				</td>
+                <td>31-07-2024</td>
+                <td>Kolkata</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=NCC202400062647" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="odd">
+                <td class="sorting_1">NCC202400091193</td>
+                <td> Fruits &amp; Vegetables Products</td>
+                <td>FRESH APPLES GRADE PREMIUM (PER CTN 18 KGS ) SIZE 90/100/110/120/135/150</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/tr.png" alt="Turkey" width="20"> Turkey</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/tr.png" alt="Turkey" width="20"> Turkey</td>
+                <td>Rejected due to Pesticide Spirodiclofen (0.121 mg/Kg) above the limit of 0.01 mg/Kg as per FSSR				</td>
+                <td>24-09-2024</td>
+                <td>Mumbai-JNPT Nhava Sheva 1</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=NCC202400091193" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="even">
+                <td class="sorting_1">NCC202400096823</td>
+                <td>Proprietary food (2.12)</td>
+                <td>MILO POWDER (MALT DRINK)</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/my.png" alt="Malaysia" width="20"> Malaysia</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/my.png" alt="Malaysia" width="20"> Malaysia</td>
+                <td>Containing non-permitted additive Stevia (INS 960)				</td>
+                <td>12-10-2024</td>
+                <td>Chennai</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=NCC202400096823" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="odd">
+                <td class="sorting_1">NCC202400109012</td>
+                <td>5.2: Confectionery</td>
+                <td>DONALD JELLY FRUITY CUP</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/id.png" alt="Indonesia" width="20"> Indonesia</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/id.png" alt="Indonesia" width="20"> Indonesia</td>
+                <td>Labelling deficiencies: Batch No, Mandatory Declaration for artificial sweetener, Misleading product name				</td>
+                <td>14-11-2024</td>
+                <td>Chennai</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=NCC202400109012" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="even">
+                <td class="sorting_1">NCC202400109013</td>
+                <td>5.2: Confectionery</td>
+                <td>DONALD JELLY Q PACK</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/id.png" alt="Indonesia" width="20"> Indonesia</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/id.png" alt="Indonesia" width="20"> Indonesia</td>
+                <td>Labelling deficiencies: Batch No, Mandatory Declaration for artificial sweetener, Misleading product name				</td>
+                <td>14-11-2024</td>
+                <td>Chennai</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=NCC202400109013" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="odd">
+                <td class="sorting_1">NCC202400109014</td>
+                <td>5.2: Confectionery</td>
+                <td>YOGU STICK</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/id.png" alt="Indonesia" width="20"> Indonesia</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/id.png" alt="Indonesia" width="20"> Indonesia</td>
+                <td>Labelling Deficiencies: Batch No, Mandatory Declaration for artificial sweetener, Misleading product name
+Presence of non-permitted artificial sweetener: Sodium Cyclamate				</td>
+                <td>14-11-2024</td>
+                <td>Chennai</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=NCC202400109014" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="even">
+                <td class="sorting_1">NCC202400114247</td>
+                <td> Fruits &amp; Vegetables Products</td>
+                <td>PALM KERNEL (SHELLED AND ROASTED) (PACK-IN-BAGS)</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/ph.png" alt="Philippines" width="20"> Philippines</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/ph.png" alt="Philippines" width="20"> Philippines</td>
+                <td>Presence of Mould and Damaged/Discoloured units.				</td>
+                <td>11-12-2024</td>
+                <td>KOLKATA</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=NCC202400114247" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="odd">
+                <td class="sorting_1">NCC202500049373</td>
+                <td>Sweets ,Confectionery products and Sweetening Agents (2.7)</td>
+                <td>PRAN CHOCO BEAN TOFFEE</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/bd.png" alt="Bangladesh" width="20"> Bangladesh</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/bd.png" alt="Bangladesh" width="20"> Bangladesh</td>
+                <td>exceeds the prescribed limit for- 
+Ash insoluble, Sunset Yellow and Tartrazine and contains “Saccharin” which is not declared on the product label				</td>
+                <td>13-06-2025</td>
+                <td>Kolkata</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=NCC202500049373" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="even">
+                <td class="sorting_1">NCC202500049388</td>
+                <td>Sweets ,Confectionery products and Sweetening Agents (2.7)</td>
+                <td>PRAN CHOCO BEAN TOFFEE</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/bd.png" alt="Bangladesh" width="20"> Bangladesh</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/bd.png" alt="Bangladesh" width="20"> Bangladesh</td>
+                <td>exceeds the prescribed limit for- 
+Ash insoluble and contains “Saccharin”, which is not declared on the product label				</td>
+                <td>13-06-2025</td>
+                <td>Kolkata</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=NCC202500049388" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="odd">
+                <td class="sorting_1">NCC202500049396</td>
+                <td>Sweets ,Confectionery products and Sweetening Agents (2.7)</td>
+                <td>PRAN CHOCO BEAN TOFFEE</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/bd.png" alt="Bangladesh" width="20"> Bangladesh</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/bd.png" alt="Bangladesh" width="20"> Bangladesh</td>
+                <td>Exceeds the prescribed limit for-
+Ash insoluble, Sunset Yellow and Tartrazine and contains “Saccharin”, which is not declared on the product label				</td>
+                <td>13-06-2025</td>
+                <td>Kolkata</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=NCC202500049396" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="even">
+                <td class="sorting_1">NCC202500110879</td>
+                <td>Spices and Condiments (2.9)</td>
+                <td>AIR DRIED PARSLEY LEAVES</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/png" alt="Serbia" width="20"> Serbia</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/png" alt="Serbia" width="20"> Serbia</td>
+                <td>Safety parameters				</td>
+                <td>02-12-2025</td>
+                <td>Chennai Sea and ICD</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=NCC202500110879" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="odd">
+                <td class="sorting_1">NCC202500111011</td>
+                <td>Proprietary food (2.12)</td>
+                <td>ROSTED SEAWEED UMAI BRAND</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/cn.png" alt="China" width="20"> China</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/cn.png" alt="China" width="20"> China</td>
+                <td>Safety parameters				</td>
+                <td>03-12-2025</td>
+                <td>Mumbai-JNPT Nhava Sheva 3</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=NCC202500111011" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="even">
+                <td class="sorting_1">RNCC202400000074</td>
+                <td>Fruits &amp; Vegetables Products(2.3)</td>
+                <td>ARECANUT(BETELNUT) WHOLE</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/bd.png" alt="Bangladesh" width="20"> Bangladesh</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/bd.png" alt="Bangladesh" width="20"> Bangladesh</td>
+                <td>Damaged Nuts % by moulds and insects ; Moisture % more than the prescribed limits 				</td>
+                <td>20-02-2024</td>
+                <td>Tuticorin</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=RNCC202400000074" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="odd">
+                <td class="sorting_1">RNCC202400000156</td>
+                <td>Fruits &amp; Vegetables Products(2.3)</td>
+                <td>SRI LANKAN ARECANUT</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/lk.png" alt="Sri Lanka" width="20"> Sri Lanka</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/lk.png" alt="Sri Lanka" width="20"> Sri Lanka</td>
+                <td>Presence of visible mould ; Damaged nuts by moulds and insects ; blemished/cracked, broken, nuts not fully dehusked				</td>
+                <td>22-04-2024</td>
+                <td>Tuticorin</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=RNCC202400000156" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="even">
+                <td class="sorting_1">RNCC202400000187</td>
+                <td>Proprietary food (2.12)</td>
+                <td>SUSHI NORI</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/cn.png" alt="China" width="20"> China</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/cn.png" alt="China" width="20"> China</td>
+                <td>Heavy Metal - Arsenic				</td>
+                <td>06-05-2024</td>
+                <td>Delhi</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=RNCC202400000187" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="odd">
+                <td class="sorting_1">RNCC202400000227</td>
+                <td>Alcoholic Beverages, Non Alcoholic Beverages including water (2.10)</td>
+                <td>BUDWEISER 0.0 (NON ALCOHOLIC BEER) (GREEN APPLE)</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/cn.png" alt="China" width="20"> China</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/cn.png" alt="China" width="20"> China</td>
+                <td>pH value is less than the prescribed limit for Alcohol-free Beer				</td>
+                <td>31-05-2024</td>
+                <td>Mumbai-JNPT Nhava Sheva</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=RNCC202400000227" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="even">
+                <td class="sorting_1">RNCC202400000518</td>
+                <td>Proprietary food (2.12)</td>
+                <td>SUSHI NORI (125G X</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/kr.png" alt="South Korea" width="20"> South Korea</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/kr.png" alt="South Korea" width="20"> South Korea</td>
+                <td>Heavy metal- Arsenic				</td>
+                <td>16-08-2024</td>
+                <td>Mumbai-JNPT Nhava Sheva</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=RNCC202400000518" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="odd">
+                <td class="sorting_1">RNCC202400000642</td>
+                <td>Fruits &amp; Vegetables Products(2.3)</td>
+                <td>FRESH FRUIT BLUEBERRY</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/pe.png" alt="Peru" width="20"> Peru</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/pe.png" alt="Peru" width="20"> Peru</td>
+                <td>Pesticides- Acetamiprid and Azoxystrobin				</td>
+                <td>14-10-2024</td>
+                <td>Delhi</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=RNCC202400000642" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="even">
+                <td class="sorting_1">RNCC202400000691</td>
+                <td>Proprietary food (2.12)</td>
+                <td>ROASTED SEAWEED FOR GIMBAB</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/kr.png" alt="South Korea" width="20"> South Korea</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/kr.png" alt="South Korea" width="20"> South Korea</td>
+                <td>Heavy Metal- Arsenic				</td>
+                <td>21-11-2024</td>
+                <td>Mumbai-JNPT Nhava Sheva</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=RNCC202400000691" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="odd">
+                <td class="sorting_1">RNCC202400000693</td>
+                <td>Fruits &amp; Vegetables Products(2.3)</td>
+                <td>PANTAINORASINGH CURRY PASTE </td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/th.png" alt="Thailand" width="20"> Thailand</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/th.png" alt="Thailand" width="20"> Thailand</td>
+                <td>Presence of non-permitted 'synthetic colour: Tartrazine'				</td>
+                <td>21-11-2024</td>
+                <td>Mumbai-JNPT Nhava Sheva</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=RNCC202400000693" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="even">
+                <td class="sorting_1">RNCC202500000369</td>
+                <td>Sweets ,Confectionery products and Sweetening Agents (2.7)</td>
+                <td>10277128/465526 SKITTLES ORIGINAL FLAVOUR</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/cn.png" alt="China" width="20"> China</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/cn.png" alt="China" width="20"> China</td>
+                <td>Higher amount of Tartrazine				</td>
+                <td>12-06-2025</td>
+                <td>Chennai Sea and ICD</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=RNCC202500000369" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="odd">
+                <td class="sorting_1">RNCC202500000489</td>
+                <td>Fruits &amp; Vegetables Products(2.3)</td>
+                <td>CHILLED / WET DATES</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/ae.png" alt="United Arab Emirates" width="20"> United Arab Emirates</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/ae.png" alt="United Arab Emirates" width="20"> United Arab Emirates</td>
+                <td>Presence of Dead Insects/ Insect Fragments, Living Insects and Blemished/ Damaged units above the prescribed limit				</td>
+                <td>08-08-2025</td>
+                <td>Cochin Sea &amp; Air Port</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=RNCC202500000489" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="even">
+                <td class="sorting_1">RNCC202500000512</td>
+                <td>Fruits &amp; Vegetables Products(2.3)</td>
+                <td>PISTACHIO KERNEL</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/ir.png" alt="Iran" width="20"> Iran</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/ae.png" alt="Iran" width="20"> United Arab Emirates</td>
+                <td>Rejected due to higher amount of Aflatoxin- B1 (552.309 mg/Kg) above the limit 10 mg/Kg as per FSSR and higher limit of Total Aflatoxin (645.213) mg/Kg) above the limit 15 mg/Kg as per FSSR
+
+
+				</td>
+                <td>19-08-2025</td>
+                <td>Mumbai-JNPT Nhava Sheva 1</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=RNCC202500000512" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="odd">
+                <td class="sorting_1">RNCC202500000558</td>
+                <td>Fruits &amp; Vegetables Products(2.3)</td>
+                <td>ROASTED ARECA NUT</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/mm.png" alt="Myanmar" width="20"> Myanmar</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/mm.png" alt="Myanmar" width="20"> Myanmar</td>
+                <td>Quality parameters				</td>
+                <td>11-09-2025</td>
+                <td>Chennai Sea and ICD</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=RNCC202500000558" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="even">
+                <td class="sorting_1">RNCC202500000635</td>
+                <td>Proprietary food (2.12)</td>
+                <td>&amp;quot;SEASONED LAVER&amp;quot; ROASTED SEAWEED</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/kr.png" alt="South Korea" width="20"> South Korea</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/kr.png" alt="South Korea" width="20"> South Korea</td>
+                <td>Safety parameters				</td>
+                <td>08-10-2025</td>
+                <td>Mumbai-JNPT Nhava Sheva 3</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=RNCC202500000635" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="odd">
+                <td class="sorting_1">RNCC202500000636</td>
+                <td>Proprietary food (2.12)</td>
+                <td>&amp;quot;SEASONED LAVER&amp;quot; ROASTED SEAWEED</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/kr.png" alt="South Korea" width="20"> South Korea</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/kr.png" alt="South Korea" width="20"> South Korea</td>
+                <td>Safety parameters				</td>
+                <td>08-10-2025</td>
+                <td>Mumbai-JNPT Nhava Sheva 3</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=RNCC202500000636" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="even">
+                <td class="sorting_1">RNCC202500000637</td>
+                <td>Proprietary food (2.12)</td>
+                <td>&amp;quot;SEASONED LAVER&amp;quot; ROASTED KOREAN</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/kr.png" alt="South Korea" width="20"> South Korea</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/kr.png" alt="South Korea" width="20"> South Korea</td>
+                <td>Safety parameters				</td>
+                <td>08-10-2025</td>
+                <td>Mumbai-JNPT Nhava Sheva 3</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=RNCC202500000637" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="odd">
+                <td class="sorting_1">RNCC202500000689</td>
+                <td>Spices and Condiments (2.9)</td>
+                <td>DRIED GINGER (WHOLE) (INVOICE</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/mm.png" alt="Myanmar" width="20"> Myanmar</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/mm.png" alt="Myanmar" width="20"> Myanmar</td>
+                <td>Safety parameters				</td>
+                <td>30-10-2025</td>
+                <td>Chennai Sea and ICD</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=RNCC202500000689" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="even">
+                <td class="sorting_1">RNCC202500000726</td>
+                <td>Spices and Condiments (2.9)</td>
+                <td>AIR DRIED PARSLEY LEAVES</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/png" alt="Serbia" width="20"> Serbia</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/png" alt="Serbia" width="20"> Serbia</td>
+                <td>Safety parameters				</td>
+                <td>17-11-2025</td>
+                <td>Chennai Sea and ICD</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=RNCC202500000726" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="odd">
+                <td class="sorting_1">RNCC202500000789</td>
+                <td>Proprietary food (2.12)</td>
+                <td>ROASTED SEASONED SEAWEED 4GX3P</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/kr.png" alt="South Korea" width="20"> South Korea</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/kr.png" alt="South Korea" width="20"> South Korea</td>
+                <td>Safety parameters				</td>
+                <td>05-12-2025</td>
+                <td>Mumbai-JNPT Nhava Sheva 3</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=RNCC202500000789" class="details-link">View Details</a></td>
+            </tr><tr role="row" class="even">
+                <td class="sorting_1">RNCC202500000790</td>
+                <td>Proprietary food (2.12)</td>
+                <td>ROASTED SEAWEED FOR GIMBAB</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/kr.png" alt="South Korea" width="20"> South Korea</td>
+                <td><img src="./Food Import Rejection Alert (FIRA) Portal_files/kr.png" alt="South Korea" width="20"> South Korea</td>
+                <td>Safety parameters				</td>
+                <td>05-12-2025</td>
+                <td>Mumbai-JNPT Nhava Sheva 3</td>
+                <!--<td></td>!-->
+                <td align="center">Active</td>
+                <td><a href="https://fira.fssai.gov.in/view_details.php?rid=RNCC202500000790" class="details-link">View Details</a></td>
+            </tr></tbody>
+    </table></div></div><div class="row"><div class="col-sm-5"><div class="dataTables_info" id="alerts-table_info" role="status" aria-live="polite">Showing 1 to 36 of 36 entries</div></div><div class="col-sm-7"><div class="dataTables_paginate paging_simple_numbers" id="alerts-table_paginate"><ul class="pagination"><li class="paginate_button previous disabled" id="alerts-table_previous"><a href="https://fira.fssai.gov.in/index.php#" aria-controls="alerts-table" data-dt-idx="0" tabindex="0">Previous</a></li><li class="paginate_button active"><a href="https://fira.fssai.gov.in/index.php#" aria-controls="alerts-table" data-dt-idx="1" tabindex="0">1</a></li><li class="paginate_button next disabled" id="alerts-table_next"><a href="https://fira.fssai.gov.in/index.php#" aria-controls="alerts-table" data-dt-idx="2" tabindex="0">Next</a></li></ul></div></div></div></div>
+</section>
+
+<script src="./Food Import Rejection Alert (FIRA) Portal_files/jquery-2.1.1.min.js.download"></script>	
+<script src="./Food Import Rejection Alert (FIRA) Portal_files/moment.min.js.download"></script>
+<script src="./Food Import Rejection Alert (FIRA) Portal_files/daterangepicker.js.download"></script>
+	    <!-- Include all compiled plugins (below), or include individual files as needed -->
+    <script src="./Food Import Rejection Alert (FIRA) Portal_files/bootstrap.min.js.download"></script>
+	<script src="./Food Import Rejection Alert (FIRA) Portal_files/jquery.prettyPhoto.js.download"></script>
+    <script src="./Food Import Rejection Alert (FIRA) Portal_files/jquery.isotope.min.js.download"></script>  
+	<script src="./Food Import Rejection Alert (FIRA) Portal_files/wow.min.js.download"></script>
+	<script src="./Food Import Rejection Alert (FIRA) Portal_files/functions.js.download"></script>
+	<script src="./Food Import Rejection Alert (FIRA) Portal_files/perpage.js.download"></script>
+	<script src="./Food Import Rejection Alert (FIRA) Portal_files/jquery.dataTables.min.js.download"></script>
+	<script src="./Food Import Rejection Alert (FIRA) Portal_files/dataTables.bootstrap.min.js.download"></script>
+	
+	<script>
+	$(document).ready(function() {
+	$('#reservation').daterangepicker();
+    var t = $('#alerts-table').removeAttr('width').DataTable( {
+        "columnDefs": [ {
+            "searchable": false,
+            "orderable": false,
+			"targets": 'no-sort'
+        }],
+	
+        //"order": [[ 1, 'asc' ]]
+    } );
+ 
+   
+} );
+
+</script>
+<script>
+    function filterTable() {
+        var countryFilter = document.getElementById('country-filter').value;
+        var reasonFilter = document.getElementById('reason-filter').value;
+        var table = document.getElementById('alerts-table');
+        var tr = table.getElementsByTagName('tr');
+
+        for (var i = 1; i < tr.length; i++) {
+            var tdCountry = tr[i].getElementsByTagName('td')[4];
+            var tdReason = tr[i].getElementsByTagName('td')[5];
+            if (tdCountry && tdReason) {
+                var countryValue = tdCountry.textContent || tdCountry.innerText;
+                var reasonValue = tdReason.textContent or tdReason.innerText;
+                if ((countryFilter === 'all' or countryValue.toLowerCase().includes(countryFilter)) &&
+                    (reasonFilter === 'all' or reasonValue.toLowerCase().includes(reasonFilter))) {
+                    tr[i].style.display = '';
+                } else {
+                    tr[i].style.display = 'none';
+                }
+            }
+        }
+    }
+</script>
+<footer>
+<p><span>Visitor Counter - </span> <span id="visitor_count">32215</span> </p>
+    <p>© 2024 FIRA Portal. All rights reserved.</p>
+</footer>
+<script>
+$(document).ready(function(){
+data1 = 'count=user';
+      $.ajax({
+        type:'post',
+        data:data1,
+        url:'includes/counter.php',
+        success:function(htm)
+        {   
+            console.log(htm+'ook');
+        }
+    });
+	
+      data1 = 'numbers=user';
+      $.ajax({
+        type:'post',
+        data:data1,
+        url:'includes/counter.php',
+        success:function(htm)
+        {   
+            console.log(htm);
+            $('#visitor_count').text(htm);
+        }
+
+    }); 
+    }); 
+</script>
+
+<div class="daterangepicker dropdown-menu show-calendar opensright" style="top: 785.752px; left: 766.262px; right: auto;"><div class="calendar first right"><div class="calendar-date"><table class="table-condensed"><thead><tr><th></th><th colspan="5" class="month">Sep 2026</th><th class="next available"><i class="fa fa-arrow-right icon icon-arrow-right glyphicon glyphicon-arrow-right"></i></th></tr><tr><th>Su</th><th>Mo</th><th>Tu</th><th>We</th><th>Th</th><th>Fr</th><th>Sa</th></tr></thead><tbody><tr><td class="off disabled" data-title="r0c0">30</td><td class="off disabled" data-title="r0c1">31</td><td class="off disabled" data-title="r0c2">1</td><td class="off disabled" data-title="r0c3">2</td><td class="off disabled" data-title="r0c4">3</td><td class="off disabled" data-title="r0c5">4</td><td class="off disabled" data-title="r0c6">5</td></tr><tr><td class="off disabled" data-title="r1c0">6</td><td class="off disabled" data-title="r1c1">7</td><td class="off disabled" data-title="r1c2">8</td><td class="off disabled" data-title="r1c3">9</td><td class="off disabled" data-title="r1c4">10</td><td class="off disabled" data-title="r1c5">11</td><td class="off disabled" data-title="r1c6">12</td></tr><tr><td class="off disabled" data-title="r2c0">13</td><td class="off disabled" data-title="r2c1">14</td><td class="off disabled" data-title="r2c2">15</td><td class="off disabled" data-title="r2c3">16</td><td class="off disabled" data-title="r2c4">17</td><td class="off disabled" data-title="r2c5">18</td><td class="off disabled" data-title="r2c6">19</td></tr><tr><td class="available active start-date end-date" data-title="r3c0">20</td><td class="available" data-title="r3c1">21</td><td class="available" data-title="r3c2">22</td><td class="available" data-title="r3c3">23</td><td class="available" data-title="r3c4">24</td><td class="available" data-title="r3c5">25</td><td class="available" data-title="r3c6">26</td></tr><tr><td class="available" data-title="r4c0">27</td><td class="available" data-title="r4c1">28</td><td class="available" data-title="r4c2">29</td><td class="available" data-title="r4c3">30</td><td class="available off" data-title="r4c4">1</td><td class="available off" data-title="r4c5">2</td><td class="available off" data-title="r4c6">3</td></tr><tr><td class="available off" data-title="r5c0">4</td><td class="available off" data-title="r5c1">5</td><td class="available off" data-title="r5c2">6</td><td class="available off" data-title="r5c3">7</td><td class="available off" data-title="r5c4">8</td><td class="available off" data-title="r5c5">9</td><td class="available off" data-title="r5c6">10</td></tr></tbody></table></div></div><div class="calendar second left"><div class="calendar-date"><table class="table-condensed"><thead><tr><th class="prev available"><i class="fa fa-arrow-left icon icon-arrow-left glyphicon glyphicon-arrow-left"></i></th><th colspan="5" class="month">Sep 2026</th><th class="next available"><i class="fa fa-arrow-right icon icon-arrow-right glyphicon glyphicon-arrow-right"></i></th></tr><tr><th>Su</th><th>Mo</th><th>Tu</th><th>We</th><th>Th</th><th>Fr</th><th>Sa</th></tr></thead><tbody><tr><td class="available off" data-title="r0c0">30</td><td class="available off" data-title="r0c1">31</td><td class="available" data-title="r0c2">1</td><td class="available" data-title="r0c3">2</td><td class="available" data-title="r0c4">3</td><td class="available" data-title="r0c5">4</td><td class="available" data-title="r0c6">5</td></tr><tr><td class="available" data-title="r1c0">6</td><td class="available" data-title="r1c1">7</td><td class="available" data-title="r1c2">8</td><td class="available" data-title="r1c3">9</td><td class="available" data-title="r1c4">10</td><td class="available" data-title="r1c5">11</td><td class="available" data-title="r1c6">12</td></tr><tr><td class="available" data-title="r2c0">13</td><td class="available" data-title="r2c1">14</td><td class="available" data-title="r2c2">15</td><td class="available" data-title="r2c3">16</td><td class="available" data-title="r2c4">17</td><td class="available" data-title="r2c5">18</td><td class="available" data-title="r2c6">19</td></tr><tr><td class="available active start-date end-date" data-title="r3c0">20</td><td class="available" data-title="r3c1">21</td><td class="available" data-title="r3c2">22</td><td class="available" data-title="r3c3">23</td><td class="available" data-title="r3c4">24</td><td class="available" data-title="r3c5">25</td><td class="available" data-title="r3c6">26</td></tr><tr><td class="available" data-title="r4c0">27</td><td class="available" data-title="r4c1">28</td><td class="available" data-title="r4c2">29</td><td class="available" data-title="r4c3">30</td><td class="available off" data-title="r4c4">1</td><td class="available off" data-title="r4c5">2</td><td class="available off" data-title="r4c6">3</td></tr><tr><td class="available off" data-title="r5c0">4</td><td class="available off" data-title="r5c1">5</td><td class="available off" data-title="r5c2">6</td><td class="available off" data-title="r5c3">7</td><td class="available off" data-title="r5c4">8</td><td class="available off" data-title="r5c5">9</td><td class="available off" data-title="r5c6">10</td></tr></tbody></table></div></div><div class="ranges"><div class="range_inputs"><div class="daterangepicker_start_input"><label for="daterangepicker_start">From</label><input class="input-mini" type="text" name="daterangepicker_start" value=""></div><div class="daterangepicker_end_input"><label for="daterangepicker_end">To</label><input class="input-mini" type="text" name="daterangepicker_end" value=""></div><button class="applyBtn btn btn-small btn-sm btn-success">Apply</button>&nbsp;<button class="cancelBtn btn btn-small btn-sm btn-default">Cancel</button></div></div></div></body></html>

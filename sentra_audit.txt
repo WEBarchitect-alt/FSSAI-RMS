@@ -1,0 +1,3160 @@
+===== backend/api/main.py =====
+import os
+import sqlite3
+from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from backend.api.dependencies import get_db, DB_PATH
+from backend.api.auth import router as auth_router
+from backend.api.routes import admin_router, india_router
+from backend.api.fda import router as fda_router
+
+app = FastAPI(
+    title="SENTRA-FS Intelligence API",
+    description="Food Safety & Import Rejection Intelligence Platform",
+    version="1.1.0"
+)
+
+# CORS Configuration
+raw_cors = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
+origins = [origin.strip() for origin in raw_cors.split(",") if origin.strip()]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins if origins else ["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Router Registrations
+app.include_router(auth_router)
+app.include_router(admin_router)
+app.include_router(india_router)
+app.include_router(fda_router)
+# -------------------------------------------------------------
+# Preserved Core Endpoints
+# -------------------------------------------------------------
+@app.get("/health", tags=["System"])
+def health_check():
+    return {
+        "status": "ok",
+        "platform": "SENTRA-FS",
+        "db_available": os.path.exists(DB_PATH)
+    }
+
+@app.get("/api/summary", tags=["Analytics"])
+def get_summary(conn: sqlite3.Connection = Depends(get_db)):
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT COUNT(*) FROM refusal_events;")
+    fda_count = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM eu_border_events;")
+    eu_count = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM india_lab_rejections;")
+    india_count = cursor.fetchone()[0]
+
+    return {
+        "refusal_events": fda_count,
+        "eu_border_events": eu_count,
+        "india_lab_rejections": india_count
+    }
+===== backend/api/routes.py =====
+from typing import Optional, List
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
+
+from backend.api.dependencies import get_db, require_admin
+
+admin_router = APIRouter(prefix="/api/admin", tags=["Administration"])
+india_router = APIRouter(prefix="/api/india/rejections", tags=["India FIRA Intelligence"])
+
+# --- Admin Models ---
+
+class AdminUserResponse(BaseModel):
+    id: int
+    username: str
+    display_name: str
+    role: str
+    is_active: bool
+    created_at: str
+    last_login_at: Optional[str] = None
+
+class ActivityLogResponse(BaseModel):
+    id: int
+    user_id: Optional[int] = None
+    username: Optional[str] = None
+    display_name: Optional[str] = None
+    username_attempted: str
+    event_type: str
+    timestamp: str
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+
+# --- Admin Endpoints ---
+
+@admin_router.get("/users", response_model=List[AdminUserResponse])
+def get_admin_users(
+    conn = Depends(get_db),
+    _ = Depends(require_admin)
+):
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, username, display_name, role, is_active, created_at, last_login_at
+        FROM users
+        ORDER BY id ASC;
+    """)
+    rows = cursor.fetchall()
+    return [
+        AdminUserResponse(
+            id=r["id"],
+            username=r["username"],
+            display_name=r["display_name"],
+            role=r["role"],
+            is_active=bool(r["is_active"]),
+            created_at=r["created_at"],
+            last_login_at=r["last_login_at"]
+        )
+        for r in rows
+    ]
+
+@admin_router.get("/activity", response_model=List[ActivityLogResponse])
+def get_admin_activity(
+    limit: int = Query(50, ge=1, le=100),
+    conn = Depends(get_db),
+    _ = Depends(require_admin)
+):
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT 
+            l.id, l.user_id, u.username, u.display_name,
+            l.username_attempted, l.event_type, l.timestamp,
+            l.ip_address, l.user_agent
+        FROM user_activity_log l
+        LEFT JOIN users u ON l.user_id = u.id
+        ORDER BY l.id DESC
+        LIMIT ?;
+    """, (limit,))
+    rows = cursor.fetchall()
+    return [
+        ActivityLogResponse(
+            id=r["id"],
+            user_id=r["user_id"],
+            username=r["username"],
+            display_name=r["display_name"],
+            username_attempted=r["username_attempted"],
+            event_type=r["event_type"],
+            timestamp=r["timestamp"],
+            ip_address=r["ip_address"],
+            user_agent=r["user_agent"]
+        )
+        for r in rows
+    ]
+
+# --- India FIRA Analytics Endpoints ---
+
+@india_router.get("/summary")
+def get_india_rejections_summary(conn = Depends(get_db)):
+    cursor = conn.cursor()
+
+    # Aggregate metric totals
+    cursor.execute("""
+        SELECT 
+            COUNT(*) as total_rows,
+            COALESCE(SUM(rejection_count), 0) as total_rejection_count,
+            COUNT(DISTINCT country_of_origin) as total_countries,
+            COUNT(DISTINCT financial_year) as total_years
+        FROM india_lab_rejections;
+    """)
+    summary_row = cursor.fetchone()
+
+    # Distinct financial years
+    cursor.execute("SELECT DISTINCT financial_year FROM india_lab_rejections ORDER BY financial_year ASC;")
+    financial_years = [r["financial_year"] for r in cursor.fetchall()]
+
+    # Top 5 countries by volume
+    cursor.execute("""
+        SELECT country_of_origin, SUM(rejection_count) as total_rejections
+        FROM india_lab_rejections
+        GROUP BY country_of_origin
+        ORDER BY total_rejections DESC
+        LIMIT 5;
+    """)
+    top_countries = [
+        {"country": r["country_of_origin"], "total_rejections": r["total_rejections"]}
+        for r in cursor.fetchall()
+    ]
+
+    return {
+        "jurisdiction": "India",
+        "regulator": "FSSAI / FIRA",
+        "stage": "Laboratory Testing Stage",
+        "total_rows": summary_row["total_rows"],
+        "total_rejection_count": summary_row["total_rejection_count"],
+        "total_countries": summary_row["total_countries"],
+        "financial_years": financial_years,
+        "top_countries": top_countries
+    }
+
+@india_router.get("/by-year")
+def get_india_rejections_by_year(conn = Depends(get_db)):
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT 
+            financial_year,
+            SUM(rejection_count) as total_rejections,
+            COUNT(DISTINCT country_of_origin) as countries_affected,
+            COUNT(*) as record_count
+        FROM india_lab_rejections
+        GROUP BY financial_year
+        ORDER BY financial_year ASC;
+    """)
+    rows = cursor.fetchall()
+    return [
+        {
+            "financial_year": r["financial_year"],
+            "total_rejections": r["total_rejections"],
+            "countries_affected": r["countries_affected"],
+            "record_count": r["record_count"]
+        }
+        for r in rows
+    ]
+
+@india_router.get("/by-country")
+def get_india_rejections_by_country(
+    limit: int = Query(50, ge=1, le=150),
+    conn = Depends(get_db)
+):
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT 
+            country_of_origin,
+            SUM(rejection_count) as total_rejections,
+            COUNT(DISTINCT financial_year) as years_active,
+            GROUP_CONCAT(DISTINCT financial_year) as active_financial_years
+        FROM india_lab_rejections
+        GROUP BY country_of_origin
+        ORDER BY total_rejections DESC
+        LIMIT ?;
+    """, (limit,))
+    rows = cursor.fetchall()
+    return [
+        {
+            "country_of_origin": r["country_of_origin"],
+            "total_rejections": r["total_rejections"],
+            "years_active": r["years_active"],
+            "active_financial_years": r["active_financial_years"].split(",") if r["active_financial_years"] else []
+        }
+        for r in rows
+    ]
+===== backend/api/dependencies.py =====
+import os
+import sqlite3
+from typing import Dict, Any, Generator
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import jwt
+from dotenv import load_dotenv
+
+load_dotenv()
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DB_PATH = os.path.join(BASE_DIR, "backend", "db", "sentra_fs.db")
+
+JWT_SECRET = os.getenv("SENTRA_JWT_SECRET")
+if not JWT_SECRET:
+    raise RuntimeError(
+        "CRITICAL: SENTRA_JWT_SECRET is not set in environment or .env file. "
+        "Set SENTRA_JWT_SECRET before running the application."
+    )
+
+JWT_ALGORITHM = os.getenv("SENTRA_JWT_ALGORITHM", "HS256")
+JWT_EXPIRE_HOURS = int(os.getenv("SENTRA_JWT_EXPIRE_HOURS", "8"))
+
+security = HTTPBearer()
+
+def get_db() -> Generator[sqlite3.Connection, None, None]:
+    """Provides a SQLite connection with dict-like row factories and foreign keys enabled."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON;")
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    conn: sqlite3.Connection = Depends(get_db)
+) -> Dict[str, Any]:
+    """Validates the Bearer JWT and retrieves the active user record."""
+    token = credentials.credentials
+    auth_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials or token expired.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise auth_exception
+    except jwt.PyJWTError:
+        raise auth_exception
+
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, username, display_name, role, is_active, created_at, last_login_at
+        FROM users
+        WHERE username = ?;
+    """, (username,))
+    user = cursor.fetchone()
+
+    if user is None or user["is_active"] != 1:
+        raise auth_exception
+
+    return dict(user)
+
+def require_admin(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """Ensures the authenticated user holds administrative privileges."""
+    if current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access forbidden: administrative role required."
+        )
+    return current_user
+===== backend/api/fda.py =====
+from typing import Optional, List
+import math
+import sqlite3
+
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
+
+from backend.api.dependencies import get_db, get_current_user
+
+
+router = APIRouter(
+    prefix="/api/fda",
+    tags=["US FDA Refusals Investigation"]
+)
+
+
+# ============================================================
+# RESPONSE MODELS
+# ============================================================
+
+class FdaRefusalItem(BaseModel):
+    id: int
+    refusal_id: Optional[str] = None
+    entry_num: Optional[str] = None
+    line_num: Optional[str] = None
+    refusal_date: Optional[str] = None
+
+    product_code: Optional[str] = None
+    industry_code: Optional[str] = None
+    food_class: Optional[str] = None
+    product_desc: Optional[str] = None
+
+    country_code: Optional[str] = None
+    country_name: Optional[str] = None
+
+    manufacturer_name: Optional[str] = None
+    manufacturer_city: Optional[str] = None
+    port_of_entry: Optional[str] = None
+
+    primary_charge_code: Optional[str] = None
+    primary_act_section: Optional[str] = None
+    primary_charge_statement: Optional[str] = None
+
+    charge_category: Optional[str] = None
+    defect_standard_status: Optional[str] = None
+
+
+class FdaPaginationResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    items: List[FdaRefusalItem]
+
+
+class FdaFilterOptionsResponse(BaseModel):
+    charge_categories: List[str]
+    industry_codes: List[str]
+    top_countries: List[str]
+
+
+class FdaSummaryResponse(BaseModel):
+    total_refusal_events: int
+    unique_countries: int
+    unique_industry_codes: int
+    unique_charge_categories: int
+    earliest_refusal_date: Optional[str] = None
+    latest_refusal_date: Optional[str] = None
+
+
+# ============================================================
+# FILTER OPTIONS
+# ============================================================
+
+@router.get(
+    "/filters",
+    response_model=FdaFilterOptionsResponse
+)
+def get_fda_filter_options(
+    conn: sqlite3.Connection = Depends(get_db),
+    _current_user: dict = Depends(get_current_user)
+):
+    """
+    Returns values used to populate FDA investigation filters.
+    """
+
+    cursor = conn.cursor()
+
+    # --------------------------------------------------------
+    # Charge categories
+    # --------------------------------------------------------
+    cursor.execute("""
+        SELECT DISTINCT charge_category
+        FROM refusal_events
+        WHERE charge_category IS NOT NULL
+          AND TRIM(charge_category) != ''
+        ORDER BY charge_category ASC;
+    """)
+
+    charge_categories = [
+        row["charge_category"]
+        for row in cursor.fetchall()
+    ]
+
+    # --------------------------------------------------------
+    # Industry codes
+    # --------------------------------------------------------
+    cursor.execute("""
+        SELECT DISTINCT industry_code
+        FROM refusal_events
+        WHERE industry_code IS NOT NULL
+          AND TRIM(industry_code) != ''
+        ORDER BY industry_code ASC;
+    """)
+
+    industry_codes = [
+        row["industry_code"]
+        for row in cursor.fetchall()
+    ]
+
+    # --------------------------------------------------------
+    # Top 30 origin countries
+    # --------------------------------------------------------
+    cursor.execute("""
+        SELECT
+            country_name,
+            COUNT(*) AS record_count
+        FROM refusal_events
+        WHERE country_name IS NOT NULL
+          AND TRIM(country_name) != ''
+        GROUP BY country_name
+        ORDER BY record_count DESC
+        LIMIT 30;
+    """)
+
+    top_countries = [
+        row["country_name"]
+        for row in cursor.fetchall()
+    ]
+
+    return FdaFilterOptionsResponse(
+        charge_categories=charge_categories,
+        industry_codes=industry_codes,
+        top_countries=top_countries
+    )
+
+
+# ============================================================
+# FDA SUMMARY
+# ============================================================
+
+@router.get(
+    "/summary",
+    response_model=FdaSummaryResponse
+)
+def get_fda_summary(
+    conn: sqlite3.Connection = Depends(get_db),
+    _current_user: dict = Depends(get_current_user)
+):
+    """
+    Returns high-level FDA refusal statistics.
+    """
+
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT
+            COUNT(*) AS total_refusal_events,
+            COUNT(DISTINCT country_code) AS unique_countries,
+            COUNT(DISTINCT industry_code) AS unique_industry_codes,
+            COUNT(DISTINCT charge_category) AS unique_charge_categories,
+            MIN(refusal_date) AS earliest_refusal_date,
+            MAX(refusal_date) AS latest_refusal_date
+        FROM refusal_events;
+    """)
+
+    row = cursor.fetchone()
+
+    return FdaSummaryResponse(
+        total_refusal_events=row["total_refusal_events"] or 0,
+        unique_countries=row["unique_countries"] or 0,
+        unique_industry_codes=row["unique_industry_codes"] or 0,
+        unique_charge_categories=row["unique_charge_categories"] or 0,
+        earliest_refusal_date=row["earliest_refusal_date"],
+        latest_refusal_date=row["latest_refusal_date"]
+    )
+
+
+# ============================================================
+# FDA REFUSAL EVENTS
+# ============================================================
+
+@router.get(
+    "/events",
+    response_model=FdaPaginationResponse
+)
+def get_fda_refusal_events(
+    page: int = Query(
+        1,
+        ge=1
+    ),
+
+    page_size: int = Query(
+        25,
+        ge=10,
+        le=100
+    ),
+
+    search: Optional[str] = Query(
+        None
+    ),
+
+    country_code: Optional[str] = Query(
+        None
+    ),
+
+    industry_code: Optional[str] = Query(
+        None
+    ),
+
+    charge_category: Optional[str] = Query(
+        None
+    ),
+
+    year: Optional[str] = Query(
+        None
+    ),
+
+    sort_by: str = Query(
+        "refusal_date"
+    ),
+
+    sort_dir: str = Query(
+        "desc"
+    ),
+
+    conn: sqlite3.Connection = Depends(get_db),
+    _current_user: dict = Depends(get_current_user)
+):
+    """
+    Query FDA refusal events with server-side filtering,
+    searching, sorting and pagination.
+    """
+
+    cursor = conn.cursor()
+
+    # --------------------------------------------------------
+    # Allowed sorting columns
+    # --------------------------------------------------------
+
+    allowed_sort_columns = {
+        "id": "id",
+        "refusal_date": "refusal_date",
+        "country_code": "country_code",
+        "country_name": "country_name",
+        "industry_code": "industry_code",
+        "product_code": "product_code",
+        "manufacturer_name": "manufacturer_name",
+        "charge_category": "charge_category",
+    }
+
+    safe_sort_column = allowed_sort_columns.get(
+        sort_by,
+        "refusal_date"
+    )
+
+    safe_sort_direction = (
+        "ASC"
+        if sort_dir.lower() == "asc"
+        else "DESC"
+    )
+
+    # --------------------------------------------------------
+    # WHERE clauses
+    # --------------------------------------------------------
+
+    where_clauses = []
+    params = []
+
+    # Country
+    if country_code:
+        where_clauses.append(
+            "UPPER(country_code) = UPPER(?)"
+        )
+        params.append(country_code.strip())
+
+    # Industry
+    if industry_code:
+        where_clauses.append(
+            "industry_code = ?"
+        )
+        params.append(industry_code.strip())
+
+    # Charge category
+    if charge_category:
+        where_clauses.append(
+            "charge_category = ?"
+        )
+        params.append(charge_category.strip())
+
+    # Year
+    if year:
+        where_clauses.append(
+            "substr(refusal_date, 1, 4) = ?"
+        )
+        params.append(year.strip())
+
+    # General search
+    if search and search.strip():
+
+        search_value = f"%{search.strip()}%"
+
+        where_clauses.append("""
+            (
+                refusal_id LIKE ?
+                OR entry_num LIKE ?
+                OR line_num LIKE ?
+                OR product_code LIKE ?
+                OR product_desc LIKE ?
+                OR country_code LIKE ?
+                OR country_name LIKE ?
+                OR manufacturer_name LIKE ?
+                OR manufacturer_city LIKE ?
+                OR port_of_entry LIKE ?
+                OR primary_charge_code LIKE ?
+                OR primary_act_section LIKE ?
+                OR primary_charge_statement LIKE ?
+                OR charge_category LIKE ?
+            )
+        """)
+
+        params.extend(
+            [search_value] * 14
+        )
+
+    # --------------------------------------------------------
+    # Build WHERE
+    # --------------------------------------------------------
+
+    where_sql = ""
+
+    if where_clauses:
+        where_sql = (
+            "WHERE " +
+            " AND ".join(where_clauses)
+        )
+
+    # --------------------------------------------------------
+    # Total count
+    # --------------------------------------------------------
+
+    count_query = f"""
+        SELECT COUNT(*) AS total
+        FROM refusal_events
+        {where_sql};
+    """
+
+    cursor.execute(
+        count_query,
+        params
+    )
+
+    total = cursor.fetchone()["total"]
+
+    # --------------------------------------------------------
+    # Pagination
+    # --------------------------------------------------------
+
+    offset = (page - 1) * page_size
+
+    total_pages = (
+        math.ceil(total / page_size)
+        if total > 0
+        else 0
+    )
+
+    # --------------------------------------------------------
+    # Events query
+    # --------------------------------------------------------
+
+    events_query = f"""
+        SELECT
+            id,
+            refusal_id,
+            entry_num,
+            line_num,
+            refusal_date,
+            product_code,
+            industry_code,
+            food_class,
+            product_desc,
+            country_code,
+            country_name,
+            manufacturer_name,
+            manufacturer_city,
+            port_of_entry,
+            primary_charge_code,
+            primary_act_section,
+            primary_charge_statement,
+            charge_category,
+            defect_standard_status
+        FROM refusal_events
+        {where_sql}
+        ORDER BY
+            {safe_sort_column} {safe_sort_direction},
+            id DESC
+        LIMIT ? OFFSET ?;
+    """
+
+    event_params = params + [
+        page_size,
+        offset
+    ]
+
+    cursor.execute(
+        events_query,
+        event_params
+    )
+
+    rows = cursor.fetchall()
+
+    # --------------------------------------------------------
+    # Response items
+    # --------------------------------------------------------
+
+    items = [
+        FdaRefusalItem(
+            id=row["id"],
+            refusal_id=row["refusal_id"],
+            entry_num=row["entry_num"],
+            line_num=row["line_num"],
+            refusal_date=row["refusal_date"],
+            product_code=row["product_code"],
+            industry_code=row["industry_code"],
+            food_class=row["food_class"],
+            product_desc=row["product_desc"],
+            country_code=row["country_code"],
+            country_name=row["country_name"],
+            manufacturer_name=row["manufacturer_name"],
+            manufacturer_city=row["manufacturer_city"],
+            port_of_entry=row["port_of_entry"],
+            primary_charge_code=row["primary_charge_code"],
+            primary_act_section=row["primary_act_section"],
+            primary_charge_statement=row["primary_charge_statement"],
+            charge_category=row["charge_category"],
+            defect_standard_status=row["defect_standard_status"]
+        )
+        for row in rows
+    ]
+
+    return FdaPaginationResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        items=items
+    )
+===== frontend/src/App.tsx =====
+import { useEffect, useState, useCallback } from "react";
+import axios from "axios";
+import {
+  Activity,
+  AlertTriangle,
+  BarChart3,
+  CheckCircle2,
+  Database,
+  FileWarning,
+  Globe2,
+  HelpCircle,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  RefreshCw,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+  X,
+} from "lucide-react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import "./App.css";
+
+const API = "http://127.0.0.1:8000";
+
+type Summary = {
+  total_refusal_events: number;
+  unique_countries: number;
+  unique_industry_codes: number;
+  unique_charge_categories: number;
+  earliest_refusal_date: string;
+  latest_refusal_date: string;
+};
+
+type Event = {
+  id: number;
+  refusal_id?: string;
+  entry_num?: string;
+  line_num?: string;
+  refusal_date?: string;
+  product_code?: string;
+  industry_code?: string;
+  food_class?: string;
+  product_desc?: string;
+  country_code?: string;
+  country_name?: string;
+  manufacturer_name?: string;
+  manufacturer_city?: string;
+  port_of_entry?: string;
+  primary_charge_code?: string;
+  primary_act_section?: string;
+  primary_charge_statement?: string;
+  charge_category?: string;
+  defect_standard_status?: string;
+};
+
+type EventsResponse = {
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  items: Event[];
+};
+
+type Filters = {
+  charge_categories: string[];
+  industry_codes: string[];
+  top_countries: string[];
+};
+
+type GlobalSource = {
+  id: string;
+  name: string;
+  agency: string;
+  status: "Connected" | "Pending";
+  coverage: string;
+  records: string;
+  notes: string;
+};
+
+const GLOBAL_SOURCES: GlobalSource[] = [
+  {
+    id: "IN",
+    name: "India Regulatory Registry",
+    agency: "FSSAI / FIRA Domestic Intelligence",
+    status: "Connected",
+    coverage: "2019–2026",
+    records: "11,358 (Linked)",
+    notes: "Primary monitored domestic and trade-linked jurisdiction",
+  },
+  {
+    id: "US",
+    name: "United States Refusal Intelligence",
+    agency: "U.S. FDA Import Refusals (OASIS)",
+    status: "Connected",
+    coverage: "2019–2026",
+    records: "62,937",
+    notes: "Active international surveillance and border detention feed",
+  },
+  {
+    id: "EU",
+    name: "European Union Safety Gate",
+    agency: "EC Rapid Alert System for Food and Feed (RASFF)",
+    status: "Pending",
+    coverage: "Awaiting Feed",
+    records: "—",
+    notes: "Direct integration scheduled for Phase 2 intake",
+  },
+  {
+    id: "AU",
+    name: "Australia Biosecurity Import System",
+    agency: "DAFF Imported Food Inspection Scheme",
+    status: "Pending",
+    coverage: "Awaiting Feed",
+    records: "—",
+    notes: "Scheduled statutory surveillance pipeline",
+  },
+  {
+    id: "CA",
+    name: "Canada Food Inspection Intelligence",
+    agency: "CFIA Automated Import Reference",
+    status: "Pending",
+    coverage: "Awaiting Feed",
+    records: "—",
+    notes: "Scheduled North American cross-border surveillance",
+  },
+];
+
+function App() {
+  const [token, setToken] = useState(localStorage.getItem("sentra_token"));
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [totalEvents, setTotalEvents] = useState(0);
+  const [filters, setFilters] = useState<Filters>({
+    charge_categories: [],
+    industry_codes: [],
+    top_countries: [],
+  });
+
+  const [activeNav, setActiveNav] = useState("overview-india");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Selected row state for investigation drawer
+  const [selectedRecord, setSelectedRecord] = useState<Event | null>(null);
+
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [search, setSearch] = useState("");
+  const [countryFilter, setCountryFilter] = useState("");
+  const [industryFilter, setIndustryFilter] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+  // Escape key handler to close the drawer
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === "Escape" && selectedRecord) {
+        setSelectedRecord(null);
+      }
+    },
+    [selectedRecord]
+  );
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
+
+  async function login(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+
+    try {
+      const response = await axios.post(`${API}/api/auth/login`, {
+        username,
+        password,
+      });
+
+      const newToken = response.data.access_token;
+      localStorage.setItem("sentra_token", newToken);
+      setToken(newToken);
+      setPassword("");
+    } catch {
+      setError("Invalid username or password.");
+    }
+  }
+
+  function logout() {
+    localStorage.removeItem("sentra_token");
+    setToken(null);
+    setSummary(null);
+    setEvents([]);
+    setTotalEvents(0);
+    setSelectedRecord(null);
+  }
+
+  async function loadDashboard() {
+    if (!token) return;
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const [summaryResponse, filtersResponse] = await Promise.all([
+        axios.get(`${API}/api/fda/summary`, { headers }),
+        axios.get(`${API}/api/fda/filters`, { headers }),
+      ]);
+
+      setSummary(summaryResponse.data);
+      setFilters(filtersResponse.data);
+    } catch (err: any) {
+      if (err.response?.status === 401) {
+        logout();
+      } else {
+        setError("Unable to load regulatory intelligence summary.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadEvents() {
+    if (!token) return;
+
+    setLoading(true);
+
+    try {
+      const params = new URLSearchParams();
+      params.set("page", String(page));
+      params.set("page_size", "10");
+
+      if (search.trim()) params.set("search", search.trim());
+      if (countryFilter) params.set("country_code", countryFilter);
+      if (industryFilter) params.set("industry_code", industryFilter);
+
+      const response = await axios.get<EventsResponse>(
+        `${API}/api/fda/events?${params.toString()}`,
+        { headers }
+      );
+
+      setEvents(response.data.items);
+      setTotalPages(response.data.total_pages);
+      setTotalEvents(response.data.total);
+    } catch (err: any) {
+      if (err.response?.status === 401) {
+        logout();
+      } else {
+        setError("Unable to load regulatory event records.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (token) {
+      loadDashboard();
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (token) {
+      loadEvents();
+    }
+  }, [token, page, countryFilter, industryFilter]);
+
+  function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    setPage(1);
+    loadEvents();
+  }
+
+  function selectCountryQuickFilter(code: string) {
+    setCountryFilter(code);
+    setPage(1);
+    setActiveNav("monitoring-refusals");
+  }
+
+  // Safe field formatter for records
+  function displayField(val: string | number | undefined | null): string {
+    if (val === null || val === undefined) return "Not specified";
+    const str = String(val).trim();
+    return str === "" ? "Not specified" : str;
+  }
+
+  if (!token) {
+    return (
+      <div className="login-page">
+        <div className="login-card">
+          <div className="brand-mark">
+            <ShieldCheck size={26} />
+          </div>
+
+          <div className="login-brand">SENTRA-FS</div>
+
+          <p className="login-subtitle">
+            Food Safety Regulatory Intelligence & Risk Monitoring Platform
+          </p>
+
+          <form className="login-form" onSubmit={login}>
+            <label>Username</label>
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Officer ID or username"
+              autoComplete="username"
+              required
+            />
+
+            <label>Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter secure password"
+              autoComplete="current-password"
+              required
+            />
+
+            {error && <div className="login-error">{error}</div>}
+
+            <button type="submit">Sign In to Regulatory Terminal</button>
+          </form>
+
+          <div className="login-footer">
+            Indian Food Safety & Enforcement Network • Restricted Access
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const sampleChartData = events.reduce(
+    (acc: { country: string; count: number }[], event) => {
+      const code = event.country_code || "Unknown";
+      const existing = acc.find((item) => item.country === code);
+
+      if (existing) {
+        existing.count++;
+      } else {
+        acc.push({ country: code, count: 1 });
+      }
+
+      return acc;
+    },
+    []
+  );
+
+  sampleChartData.sort((a, b) => b.count - a.count);
+
+  return (
+    <div className="app-shell">
+      <aside className={`sidebar ${sidebarOpen ? "" : "collapsed"}`}>
+        <div className="sidebar-header">
+          <div className="brand-icon">
+            <ShieldCheck size={20} />
+          </div>
+
+          {sidebarOpen && (
+            <div>
+              <div className="brand-title">SENTRA-FS</div>
+              <div className="brand-caption">FOOD SAFETY INTELLIGENCE</div>
+            </div>
+          )}
+        </div>
+
+        <nav>
+          <div className="nav-section">OVERVIEW</div>
+
+          <button
+            className={`nav-item ${activeNav === "overview-india" ? "active" : ""}`}
+            onClick={() => setActiveNav("overview-india")}
+            title="India Overview"
+          >
+            <LayoutDashboard size={16} />
+            {sidebarOpen && "India Overview"}
+          </button>
+
+          <button
+            className={`nav-item ${activeNav === "overview-global" ? "active" : ""}`}
+            onClick={() => setActiveNav("overview-global")}
+            title="Global Intelligence"
+          >
+            <Globe2 size={16} />
+            {sidebarOpen && "Global Intelligence"}
+          </button>
+
+          <div className="nav-section">MONITORING</div>
+
+          <button
+            className={`nav-item ${activeNav === "monitoring-import" ? "active" : ""}`}
+            onClick={() => setActiveNav("monitoring-import")}
+            title="Import Intelligence"
+          >
+            <BarChart3 size={16} />
+            {sidebarOpen && "Import Intelligence"}
+          </button>
+
+          <button
+            className={`nav-item ${activeNav === "monitoring-country" ? "active" : ""}`}
+            onClick={() => setActiveNav("monitoring-country")}
+            title="Country Monitoring"
+          >
+            <Globe2 size={16} />
+            {sidebarOpen && "Country Monitoring"}
+          </button>
+
+          <button
+            className={`nav-item ${activeNav === "monitoring-sources" ? "active" : ""}`}
+            onClick={() => setActiveNav("monitoring-sources")}
+            title="Regulatory Sources"
+          >
+            <Database size={16} />
+            {sidebarOpen && "Regulatory Sources"}
+          </button>
+
+          <div className="nav-section">INVESTIGATION</div>
+
+          <button
+            className={`nav-item ${activeNav === "monitoring-signals" ? "active" : ""}`}
+            onClick={() => setActiveNav("monitoring-signals")}
+            title="Risk Signals"
+          >
+            <AlertTriangle size={16} />
+            {sidebarOpen && "Risk Signals"}
+          </button>
+
+          <button
+            className={`nav-item ${activeNav === "monitoring-refusals" ? "active" : ""}`}
+            onClick={() => setActiveNav("monitoring-refusals")}
+            title="FDA Refusals"
+          >
+            <FileWarning size={16} />
+            {sidebarOpen && "FDA Refusals"}
+          </button>
+
+          <button
+            className={`nav-item ${activeNav === "investigations-dossier" ? "active" : ""}`}
+            onClick={() => setActiveNav("investigations-dossier")}
+            title="Investigations"
+          >
+            <Search size={16} />
+            {sidebarOpen && "Investigations"}
+          </button>
+
+          <div className="nav-section">ANALYTICS</div>
+
+          <button
+            className={`nav-item ${activeNav === "analytics-trends" ? "active" : ""}`}
+            onClick={() => setActiveNav("analytics-trends")}
+            title="Trends"
+          >
+            <BarChart3 size={16} />
+            {sidebarOpen && "Trends"}
+          </button>
+
+          <button
+            className={`nav-item ${activeNav === "analytics-risk" ? "active" : ""}`}
+            onClick={() => setActiveNav("analytics-risk")}
+            title="Risk Analytics"
+          >
+            <Activity size={16} />
+            {sidebarOpen && "Risk Analytics"}
+          </button>
+
+          <div className="nav-section">SYSTEM</div>
+
+          <button
+            className={`nav-item ${activeNav === "system-sources" ? "active" : ""}`}
+            onClick={() => setActiveNav("system-sources")}
+            title="Data Sources"
+          >
+            <Database size={16} />
+            {sidebarOpen && "Data Sources"}
+          </button>
+
+          <button
+            className={`nav-item ${activeNav === "system-status" ? "active" : ""}`}
+            onClick={() => setActiveNav("system-status")}
+            title="System Status"
+          >
+            <Activity size={16} />
+            {sidebarOpen && "System Status"}
+          </button>
+        </nav>
+
+        <div className="sidebar-bottom">
+          <button className="nav-item logout" onClick={logout} title="Sign out">
+            <LogOut size={16} />
+            {sidebarOpen && "Sign out"}
+          </button>
+        </div>
+      </aside>
+
+      <main className="main-content">
+        <header className="topbar">
+          <button
+            className="icon-button"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            title="Toggle Sidebar"
+          >
+            {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
+          </button>
+
+          <div className="topbar-title">
+            <span>SENTRA-FS</span>
+            <small>Indian Food Safety & Regulatory Intelligence</small>
+          </div>
+
+          <div className="topbar-right">
+            <span className="status-dot" />
+            SYSTEM OPERATIONAL
+          </div>
+        </header>
+
+        <section className="content">
+          <div className="page-heading">
+            <div>
+              <h1>India Food Safety Intelligence</h1>
+              <p>
+                National overview of food import risk, regulatory signals and global safety intelligence.
+              </p>
+            </div>
+
+            <button
+              className="refresh-button"
+              onClick={() => {
+                loadDashboard();
+                loadEvents();
+              }}
+              disabled={loading}
+            >
+              <RefreshCw size={13} className={loading ? "spin" : ""} />
+              Refresh Feeds
+            </button>
+          </div>
+
+          {error && <div className="login-error">{error}</div>}
+
+          {/* Institutional Primary KPIs */}
+          <div className="stats-grid">
+            <div className="stat-card">
+              <div className="stat-icon">
+                <FileWarning size={18} />
+              </div>
+              <div>
+                <span>Total Regulatory Events</span>
+                <strong>
+                  {summary?.total_refusal_events?.toLocaleString() ?? "62,937"}
+                </strong>
+              </div>
+            </div>
+
+            <div className="stat-card">
+              <div className="stat-icon">
+                <Globe2 size={18} />
+              </div>
+              <div>
+                <span>Countries Monitored</span>
+                <strong>{summary?.unique_countries ?? "155"}</strong>
+              </div>
+            </div>
+
+            <div className="stat-card">
+              <div className="stat-icon">
+                <BarChart3 size={18} />
+              </div>
+              <div>
+                <span>Industry Categories</span>
+                <strong>{summary?.unique_industry_codes ?? "35"}</strong>
+              </div>
+            </div>
+
+            <div className="stat-card">
+              <div className="stat-icon">
+                <Activity size={18} />
+              </div>
+              <div>
+                <span>Data Coverage</span>
+                <strong>
+                  {summary
+                    ? `${summary.earliest_refusal_date.slice(0, 4)}–${summary.latest_refusal_date.slice(0, 4)}`
+                    : "2019–2026"}
+                </strong>
+              </div>
+            </div>
+          </div>
+
+          {/* India Monitoring Overview Primary Panel */}
+          <div className="panel">
+            <div className="panel-header">
+              <div>
+                <h2>India Monitoring Overview</h2>
+                <span>Primary domestic oversight market and bilateral trade alert posture</span>
+              </div>
+              <span className="country-badge">PRIORITY JURISDICTION: IN</span>
+            </div>
+
+            <div style={{ padding: "16px 18px" }}>
+              <div className="stats-grid" style={{ marginBottom: 0 }}>
+                <div
+                  className="stat-card"
+                  style={{
+                    cursor: "pointer",
+                    border: countryFilter === "IN" ? "1px solid #173b5f" : undefined,
+                  }}
+                  onClick={() => selectCountryQuickFilter("IN")}
+                  title="Click to view India records in investigation table"
+                >
+                  <div className="stat-icon">
+                    <ShieldCheck size={18} />
+                  </div>
+                  <div>
+                    <span>India-linked regulatory events</span>
+                    <strong>11,358</strong>
+                    <small style={{ color: "#718096", fontSize: "11px" }}>
+                      Active trade refusal notices (ISO: IN)
+                    </small>
+                  </div>
+                </div>
+
+                <div className="stat-card">
+                  <div className="stat-icon">
+                    <Database size={18} />
+                  </div>
+                  <div>
+                    <span>Global Trade Intake</span>
+                    <strong>
+                      {summary?.total_refusal_events?.toLocaleString() ?? "62,937"}
+                    </strong>
+                    <small style={{ color: "#718096", fontSize: "11px" }}>
+                      Cross-border trade baseline
+                    </small>
+                  </div>
+                </div>
+
+                <div className="stat-card">
+                  <div className="stat-icon">
+                    <Globe2 size={18} />
+                  </div>
+                  <div>
+                    <span>Sovereign Sources</span>
+                    <strong>{summary?.unique_countries ?? "155"}</strong>
+                    <small style={{ color: "#718096", fontSize: "11px" }}>
+                      Distinct exporting nations
+                    </small>
+                  </div>
+                </div>
+
+                <div className="stat-card">
+                  <div className="stat-icon">
+                    <Activity size={18} />
+                  </div>
+                  <div>
+                    <span>Temporal Window</span>
+                    <strong>2019–2026</strong>
+                    <small style={{ color: "#718096", fontSize: "11px" }}>
+                      Multi-year longitudinal audit
+                    </small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Global Regulatory Intelligence Feed Matrix */}
+          <div className="panel">
+            <div className="panel-header">
+              <div>
+                <h2>Global Regulatory Intelligence</h2>
+                <span>International surveillance and border rejection authority feeds</span>
+              </div>
+            </div>
+
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Jurisdiction</th>
+                    <th>Authority / Source Feed</th>
+                    <th>Integration Status</th>
+                    <th>Surveillance Period</th>
+                    <th>Accessible Records</th>
+                    <th>Operational Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {GLOBAL_SOURCES.map((source) => (
+                    <tr key={source.id}>
+                      <td style={{ fontWeight: 650 }}>{source.name}</td>
+                      <td>{source.agency}</td>
+                      <td>
+                        {source.status === "Connected" ? (
+                          <span
+                            className="country-badge"
+                            style={{
+                              background: "#f0fdf4",
+                              color: "#166534",
+                              borderColor: "#bbf7d0",
+                            }}
+                          >
+                            <CheckCircle2 size={10} style={{ marginRight: 4 }} />
+                            Connected
+                          </span>
+                        ) : (
+                          <span
+                            className="country-badge"
+                            style={{
+                              background: "#fafaf9",
+                              color: "#78716c",
+                              borderColor: "#e7e5e4",
+                            }}
+                          >
+                            <HelpCircle size={10} style={{ marginRight: 4 }} />
+                            Source integration pending
+                          </span>
+                        )}
+                      </td>
+                      <td>{source.coverage}</td>
+                      <td style={{ fontFamily: "monospace" }}>{source.records}</td>
+                      <td style={{ color: "#718096" }}>{source.notes}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Country Monitoring Concept Hub */}
+          <div className="panel">
+            <div className="panel-header">
+              <div>
+                <h2>Country Monitoring Hub</h2>
+                <span>Targeted trade corridor surveillance and bilateral inspection posture</span>
+              </div>
+            </div>
+
+            <div style={{ padding: "14px 18px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "10px",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                }}
+              >
+                <span style={{ fontSize: "12px", color: "#718096", fontWeight: 600 }}>
+                  Active Investigation Profiles:
+                </span>
+
+                <button
+                  className="refresh-button"
+                  style={{
+                    background: countryFilter === "IN" ? "#173b5f" : "#ffffff",
+                    color: countryFilter === "IN" ? "#ffffff" : "#34495e",
+                  }}
+                  onClick={() => selectCountryQuickFilter(countryFilter === "IN" ? "" : "IN")}
+                >
+                  India (IN) • Primary Monitoring Market
+                </button>
+
+                <button
+                  className="refresh-button"
+                  style={{
+                    background: countryFilter === "US" ? "#173b5f" : "#ffffff",
+                    color: countryFilter === "US" ? "#ffffff" : "#34495e",
+                  }}
+                  onClick={() => selectCountryQuickFilter(countryFilter === "US" ? "" : "US")}
+                >
+                  United States (US) • Connected Authority Feed
+                </button>
+
+                <button
+                  className="refresh-button"
+                  style={{ opacity: 0.65, cursor: "not-allowed" }}
+                  disabled
+                  title="Awaiting EC RASFF pipeline configuration"
+                >
+                  European Union (EU) • Pipeline Pending
+                </button>
+
+                <button
+                  className="refresh-button"
+                  style={{ opacity: 0.65, cursor: "not-allowed" }}
+                  disabled
+                  title="Awaiting DAFF inspection feed integration"
+                >
+                  Australia (AU) • Pipeline Pending
+                </button>
+
+                <button
+                  className="refresh-button"
+                  style={{ opacity: 0.65, cursor: "not-allowed" }}
+                  disabled
+                  title="Awaiting CFIA feed integration"
+                >
+                  Canada (CA) • Pipeline Pending
+                </button>
+
+                {countryFilter && (
+                  <button
+                    className="refresh-button"
+                    style={{ marginLeft: "auto", color: "#9b2c2c" }}
+                    onClick={() => {
+                      setCountryFilter("");
+                      setPage(1);
+                    }}
+                  >
+                    Clear Filter
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Current Investigation Sample Chart */}
+          <div className="panel">
+            <div className="panel-header">
+              <div>
+                <h2>Current Investigation Sample</h2>
+                <span>
+                  Sovereign distribution of refusal events on the currently retrieved page
+                </span>
+              </div>
+            </div>
+
+            <div className="chart-container">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={sampleChartData.slice(0, 10)}>
+                  <CartesianGrid vertical={false} />
+                  <XAxis dataKey="country" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#173b5f" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* International Regulatory Refusal Intelligence Investigation Table */}
+          <div className="panel" id="investigation-registry">
+            <div className="panel-header">
+              <div>
+                <h2>International Regulatory Refusal Intelligence</h2>
+                <span>
+                  Source: U.S. FDA Import Refusal Records • Click any row to view complete investigation dossier
+                </span>
+              </div>
+              <span style={{ fontSize: "12px", color: "#718096" }}>
+                {totalEvents.toLocaleString()} records matched
+              </span>
+            </div>
+
+            <form className="filters" onSubmit={handleSearch}>
+              <div className="search-box">
+                <Search size={14} />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search products, manufacturers, identifiers..."
+                />
+              </div>
+
+              <select
+                value={countryFilter}
+                onChange={(e) => {
+                  setCountryFilter(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">All Sovereign Origins</option>
+                <option value="IN">India (IN) - Priority</option>
+                <option value="CN">China (CN)</option>
+                <option value="MX">Mexico (MX)</option>
+                <option value="TR">Turkey (TR)</option>
+                <option value="VN">Vietnam (VN)</option>
+                <option value="TH">Thailand (TH)</option>
+                <option value="FR">France (FR)</option>
+                <option value="IT">Italy (IT)</option>
+                <option value="ES">Spain (ES)</option>
+                <option value="GB">United Kingdom (GB)</option>
+                <option value="CA">Canada (CA)</option>
+                <option value="JP">Japan (JP)</option>
+                <option value="ID">Indonesia (ID)</option>
+                <option value="KR">South Korea (KR)</option>
+              </select>
+
+              <select
+                value={industryFilter}
+                onChange={(e) => {
+                  setIndustryFilter(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">All Industry Codes</option>
+                {filters.industry_codes.map((item) => (
+                  <option key={item} value={item}>
+                    Industry {item}
+                  </option>
+                ))}
+              </select>
+
+              <button className="refresh-button" type="submit" disabled={loading}>
+                Filter
+              </button>
+
+              {(countryFilter || industryFilter || search) && (
+                <button
+                  className="refresh-button"
+                  type="button"
+                  onClick={() => {
+                    setCountryFilter("");
+                    setIndustryFilter("");
+                    setSearch("");
+                    setPage(1);
+                  }}
+                >
+                  Reset
+                </button>
+              )}
+            </form>
+
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Record ID</th>
+                    <th>Refusal Date</th>
+                    <th>Origin</th>
+                    <th>Commodity / Product Description</th>
+                    <th>Industry Code</th>
+                    <th>Manufacturer / Facility</th>
+                    <th>Charge Category</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {events.map((event) => (
+                    <tr
+                      key={event.id}
+                      onClick={() => setSelectedRecord(event)}
+                      style={{
+                        cursor: "pointer",
+                        backgroundColor:
+                          selectedRecord?.id === event.id ? "#f1f5f9" : undefined,
+                      }}
+                      title="Click row to open detailed regulatory finding dossier"
+                    >
+                      <td style={{ fontFamily: "monospace", fontSize: "11px" }}>
+                        {event.refusal_id || event.id}
+                      </td>
+
+                      <td>{event.refusal_date || "—"}</td>
+
+                      <td>
+                        <span
+                          className="country-badge"
+                          style={{
+                            fontWeight: 700,
+                            background: event.country_code === "IN" ? "#fef3c7" : undefined,
+                            color: event.country_code === "IN" ? "#92400e" : undefined,
+                            border: event.country_code === "IN" ? "1px solid #fcd34d" : undefined,
+                          }}
+                        >
+                          {event.country_code || "—"}
+                        </span>
+                      </td>
+
+                      <td className="product-cell" title={event.product_desc}>
+                        {event.product_desc || "—"}
+                      </td>
+
+                      <td>{event.industry_code ? `Industry ${event.industry_code}` : "—"}</td>
+
+                      <td>{event.manufacturer_name || "—"}</td>
+
+                      <td>
+                        <span
+                          className="country-badge"
+                          style={{
+                            background: "#f1f5f9",
+                            color: "#334155",
+                            maxWidth: "180px",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={event.charge_category}
+                        >
+                          {event.charge_category || "Unclassified"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+
+                  {!loading && events.length === 0 && (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: "center", padding: "30px 14px", color: "#718096" }}>
+                        No regulatory refusal records matched the criteria.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="pagination">
+              <button
+                disabled={page <= 1 || loading}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                Previous
+              </button>
+
+              <span>
+                Page {page} of {totalPages || 1}
+              </span>
+
+              <button
+                disabled={page >= totalPages || loading}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* Investigation Dossier Drawer Modal */}
+      {selectedRecord && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 100,
+            display: "flex",
+            justifyContent: "flex-end",
+            backgroundColor: "rgba(18, 43, 68, 0.4)",
+          }}
+          onClick={() => setSelectedRecord(null)}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "580px",
+              height: "100%",
+              background: "#ffffff",
+              boxShadow: "-8px 0 24px rgba(0, 0, 0, 0.12)",
+              display: "flex",
+              flexDirection: "column",
+              borderLeft: "1px solid #dce4eb",
+              overflowY: "auto",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Drawer Header */}
+            <div
+              style={{
+                padding: "16px 20px",
+                borderBottom: "1px solid #dfe6ec",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                background: "#f8fafc",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div
+                  style={{
+                    width: "32px",
+                    height: "32px",
+                    borderRadius: "6px",
+                    background: "#173b5f",
+                    color: "#ffffff",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <ShieldAlert size={18} />
+                </div>
+                <div>
+                  <div
+                    style={{
+                      fontSize: "13px",
+                      fontWeight: 750,
+                      color: "#17202a",
+                      letterSpacing: "0.02em",
+                    }}
+                  >
+                    INVESTIGATION DOSSIER
+                  </div>
+                  <div style={{ fontSize: "11px", color: "#718096" }}>
+                    Refusal Ref:{" "}
+                    <span style={{ fontFamily: "monospace", color: "#2d3748" }}>
+                      {displayField(selectedRecord.refusal_id || selectedRecord.id)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                className="icon-button"
+                onClick={() => setSelectedRecord(null)}
+                title="Close dossier (Esc)"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Drawer Body */}
+            <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "20px" }}>
+              {/* Prominent Section: Regulatory Finding */}
+              <div
+                style={{
+                  background: "#fff5f5",
+                  border: "1px solid #fed7d7",
+                  borderRadius: "8px",
+                  padding: "16px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: "12px",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: 800,
+                      letterSpacing: "0.08em",
+                      color: "#9b2c2c",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    REGULATORY FINDING
+                  </div>
+                  <span
+                    className="country-badge"
+                    style={{
+                      background: "#9b2c2c",
+                      color: "#ffffff",
+                      border: "none",
+                      fontSize: "10px",
+                    }}
+                  >
+                    REFUSAL CHARGE
+                  </span>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#742a2a", fontWeight: 600 }}>
+                      Primary Act Section / Statutory Ground
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "monospace",
+                        fontSize: "13px",
+                        fontWeight: 700,
+                        color: "#9b2c2c",
+                        marginTop: "2px",
+                      }}
+                    >
+                      {displayField(selectedRecord.primary_act_section)}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#742a2a", fontWeight: 600 }}>
+                      Primary Charge Statement (Reason for Detention/Refusal)
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "12px",
+                        color: "#2d3748",
+                        background: "#ffffff",
+                        padding: "10px",
+                        borderRadius: "6px",
+                        border: "1px solid #fed7d7",
+                        marginTop: "4px",
+                        lineHeight: "1.5",
+                      }}
+                    >
+                      {displayField(selectedRecord.primary_charge_statement)}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginTop: "4px" }}>
+                    <div>
+                      <div style={{ fontSize: "11px", color: "#742a2a", fontWeight: 600 }}>
+                        Primary Charge Code
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: "monospace",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          color: "#1a202c",
+                          marginTop: "2px",
+                        }}
+                      >
+                        {displayField(selectedRecord.primary_charge_code)}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontSize: "11px", color: "#742a2a", fontWeight: 600 }}>
+                        Charge Category
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          color: "#1a202c",
+                          marginTop: "2px",
+                        }}
+                      >
+                        {displayField(selectedRecord.charge_category)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#742a2a", fontWeight: 600 }}>
+                      Defect Standard Status
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "12px",
+                        color: "#2d3748",
+                        marginTop: "2px",
+                      }}
+                    >
+                      {displayField(selectedRecord.defect_standard_status)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Investigation Record Section */}
+              <div
+                style={{
+                  background: "#ffffff",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "8px",
+                  padding: "16px",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 800,
+                    letterSpacing: "0.08em",
+                    color: "#4a5568",
+                    textTransform: "uppercase",
+                    marginBottom: "12px",
+                    borderBottom: "1px solid #edf2f7",
+                    paddingBottom: "6px",
+                  }}
+                >
+                  INVESTIGATION RECORD
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px", fontSize: "12px" }}>
+                  <div>
+                    <div style={{ color: "#718096", fontSize: "11px", fontWeight: 600 }}>
+                      Product Description
+                    </div>
+                    <div style={{ fontWeight: 600, color: "#1a202c", marginTop: "2px" }}>
+                      {displayField(selectedRecord.product_desc)}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                    <div>
+                      <div style={{ color: "#718096", fontSize: "11px", fontWeight: 600 }}>
+                        Country of Origin
+                      </div>
+                      <div style={{ fontWeight: 600, color: "#1a202c", marginTop: "2px" }}>
+                        {displayField(selectedRecord.country_name)} (
+                        <span style={{ fontFamily: "monospace" }}>
+                          {displayField(selectedRecord.country_code)}
+                        </span>
+                        )
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ color: "#718096", fontSize: "11px", fontWeight: 600 }}>
+                        Refusal Date
+                      </div>
+                      <div style={{ fontFamily: "monospace", color: "#1a202c", marginTop: "2px" }}>
+                        {displayField(selectedRecord.refusal_date)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ color: "#718096", fontSize: "11px", fontWeight: 600 }}>
+                      Manufacturer / Processing Facility
+                    </div>
+                    <div style={{ color: "#1a202c", marginTop: "2px" }}>
+                      {displayField(selectedRecord.manufacturer_name)}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                    <div>
+                      <div style={{ color: "#718096", fontSize: "11px", fontWeight: 600 }}>
+                        Manufacturer City
+                      </div>
+                      <div style={{ color: "#1a202c", marginTop: "2px" }}>
+                        {displayField(selectedRecord.manufacturer_city)}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ color: "#718096", fontSize: "11px", fontWeight: 600 }}>
+                        Port of Entry
+                      </div>
+                      <div style={{ color: "#1a202c", marginTop: "2px" }}>
+                        {displayField(selectedRecord.port_of_entry)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Entry Information Section */}
+              <div
+                style={{
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "8px",
+                  padding: "16px",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 800,
+                    letterSpacing: "0.08em",
+                    color: "#4a5568",
+                    textTransform: "uppercase",
+                    marginBottom: "12px",
+                    borderBottom: "1px solid #edf2f7",
+                    paddingBottom: "6px",
+                  }}
+                >
+                  ENTRY & TAXONOMY INFORMATION
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "10px",
+                    fontSize: "12px",
+                  }}
+                >
+                  <div>
+                    <div style={{ color: "#718096", fontSize: "11px", fontWeight: 600 }}>
+                      Refusal ID
+                    </div>
+                    <div style={{ fontFamily: "monospace", color: "#1a202c", marginTop: "2px" }}>
+                      {displayField(selectedRecord.refusal_id)}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ color: "#718096", fontSize: "11px", fontWeight: 600 }}>
+                      Entry Number
+                    </div>
+                    <div style={{ fontFamily: "monospace", color: "#1a202c", marginTop: "2px" }}>
+                      {displayField(selectedRecord.entry_num)}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ color: "#718096", fontSize: "11px", fontWeight: 600 }}>
+                      Line Number
+                    </div>
+                    <div style={{ fontFamily: "monospace", color: "#1a202c", marginTop: "2px" }}>
+                      {displayField(selectedRecord.line_num)}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ color: "#718096", fontSize: "11px", fontWeight: 600 }}>
+                      Product Code
+                    </div>
+                    <div style={{ fontFamily: "monospace", color: "#1a202c", marginTop: "2px" }}>
+                      {displayField(selectedRecord.product_code)}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ color: "#718096", fontSize: "11px", fontWeight: 600 }}>
+                      Industry Code
+                    </div>
+                    <div style={{ fontFamily: "monospace", color: "#1a202c", marginTop: "2px" }}>
+                      {displayField(selectedRecord.industry_code)}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ color: "#718096", fontSize: "11px", fontWeight: 600 }}>
+                      Food Class
+                    </div>
+                    <div style={{ color: "#1a202c", marginTop: "2px" }}>
+                      {displayField(selectedRecord.food_class)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Source Attribution Note */}
+              <div
+                style={{
+                  fontSize: "11px",
+                  color: "#718096",
+                  lineHeight: "1.5",
+                  borderTop: "1px solid #edf2f7",
+                  paddingTop: "10px",
+                }}
+              >
+                <strong>Regulatory Source:</strong> U.S. FDA Import Refusal Records (OASIS
+                Surveillance Feed). Displaying empirical data transmitted by federal enforcement
+                authority.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default App;
+===== frontend/src/App.css =====
+/* =========================================================
+   SENTRA-FS DESIGN SYSTEM
+   Modern Institutional / Regulatory Analytics Platform
+   ========================================================= */
+
+:root {
+  /* Surface & Canvas */
+  --bg-app: #f7f8fa;
+  --bg-surface: #ffffff;
+  --bg-surface-subtle: #fafbfd;
+  --bg-surface-hover: #f3f5f8;
+
+  /* Borders & Dividers */
+  --border-hairline: #eaedf0;
+  --border-subtle: #dfe4e9;
+  --border-strong: #c8d1d9;
+
+  /* Typography Colors */
+  --text-primary: #121820;
+  --text-secondary: #4a5568;
+  --text-tertiary: #718096;
+  --text-inverse: #ffffff;
+
+  /* Institutional Sidebar */
+  --sidebar-bg: #151c24;
+  --sidebar-border: #1f2732;
+  --sidebar-item-hover: rgba(255, 255, 255, 0.05);
+  --sidebar-item-active: #1f2a37;
+  --sidebar-text: #94a3b8;
+  --sidebar-text-active: #ffffff;
+
+  /* Semantic Tones */
+  --accent-ink: #0f172a;
+  --accent-ink-hover: #1e293b;
+  --status-positive: #166534;
+  --status-positive-bg: #f0fdf4;
+  --status-positive-border: #bbf7d0;
+  --status-danger: #991b1b;
+  --status-danger-bg: #fef2f2;
+  --status-danger-border: #fecaca;
+  --badge-neutral-bg: #edf2f7;
+  --badge-neutral-text: #334155;
+
+  /* Layout Constants */
+  --sidebar-width: 240px;
+  --sidebar-collapsed-width: 64px;
+  --topbar-height: 56px;
+  --radius-xs: 3px;
+  --radius-sm: 5px;
+  --radius-md: 7px;
+  --radius-lg: 10px;
+
+  /* Elevation */
+  --shadow-subtle: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
+  --shadow-dropdown: 0 4px 12px 0 rgba(15, 23, 42, 0.08);
+}
+
+/* =========================================================
+   LOGIN SCREEN
+   ========================================================= */
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background-color: #f1f4f7;
+  background-image: 
+    radial-gradient(at 50% 0%, #ffffff 0%, transparent 75%),
+    linear-gradient(to bottom, #edf2f7, #e2e8f0);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  padding: 36px 32px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.06), 0 4px 6px -2px rgba(15, 23, 42, 0.02);
+}
+
+.brand-mark {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  border-radius: var(--radius-md);
+  color: var(--text-inverse);
+  background: var(--accent-ink);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.login-brand {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.login-subtitle {
+  margin: 4px 0 24px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.login-form label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.login-form input {
+  width: 100%;
+  height: 38px;
+  padding: 0 11px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.login-form input:focus {
+  border-color: var(--accent-ink);
+  box-shadow: 0 0 0 1px var(--accent-ink);
+}
+
+.login-form button {
+  margin-top: 10px;
+  height: 38px;
+  border: 1px solid var(--accent-ink);
+  border-radius: var(--radius-sm);
+  color: var(--text-inverse);
+  background: var(--accent-ink);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: background-color 0.12s ease;
+}
+
+.login-form button:hover:not(:disabled) {
+  background: var(--accent-ink-hover);
+}
+
+.login-error {
+  padding: 8px 11px;
+  border-radius: var(--radius-sm);
+  color: var(--status-danger);
+  background: var(--status-danger-bg);
+  border: 1px solid var(--status-danger-border);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.login-footer {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+}
+
+/* =========================================================
+   APPLICATION SHELL & NAVIGATION
+   ========================================================= */
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  background: var(--bg-app);
+}
+
+.sidebar {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  display: flex;
+  flex-direction: column;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
+  color: var(--sidebar-text);
+  transition: width 0.18s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 30;
+}
+
+.sidebar.collapsed {
+  width: var(--sidebar-collapsed-width);
+  min-width: var(--sidebar-collapsed-width);
+}
+
+.sidebar-header {
+  height: var(--topbar-height);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--sidebar-border);
+}
+
+.brand-icon {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-inverse);
+}
+
+.brand-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #f1f5f9;
+  line-height: 1.1;
+}
+
+.brand-caption {
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.sidebar nav {
+  flex: 1;
+  padding: 14px 8px;
+  overflow-y: auto;
+}
+
+.nav-section {
+  padding: 10px 10px 4px;
+  color: #475569;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.nav-item {
+  width: 100%;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: #94a3b8;
+  background: transparent;
+  text-align: left;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color 0.1s ease, background-color 0.1s ease;
+}
+
+.nav-item:hover {
+  color: #f8fafc;
+  background: var(--sidebar-item-hover);
+}
+
+.nav-item.active {
+  color: #ffffff;
+  background: var(--sidebar-item-active);
+  font-weight: 600;
+}
+
+.sidebar-bottom {
+  padding: 10px 8px;
+  border-top: 1px solid var(--sidebar-border);
+}
+
+.nav-item.logout {
+  color: #94a3b8;
+}
+
+.nav-item.logout:hover {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+/* =========================================================
+   TOP HEADER
+   ========================================================= */
+
+.main-content {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  height: var(--topbar-height);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border-hairline);
+  background: var(--bg-surface);
+}
+
+.icon-button {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.icon-button:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.topbar-title {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.topbar-title span {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+  text-transform: uppercase;
+}
+
+.topbar-title small {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.topbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-xs);
+  background: var(--bg-surface-subtle);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--status-positive);
+}
+
+/* =========================================================
+   MAIN VIEWPORT & PAGE HEADINGS
+   ========================================================= */
+
+.content {
+  max-width: 1440px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 24px 28px 48px;
+}
+
+.page-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+.page-heading h1 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+
+.page-heading p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.refresh-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  font-size: 11.5px;
+  font-weight: 600;
+  box-shadow: var(--shadow-subtle);
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.refresh-button:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  border-color: #94a3b8;
+}
+
+/* =========================================================
+   COMPACT ANALYTICAL KPI METRIC CARDS
+   ========================================================= */
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.stat-icon {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: var(--bg-surface-subtle);
+  border: 1px solid var(--border-hairline);
+}
+
+.stat-card span {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  margin-bottom: 2px;
+}
+
+.stat-card strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-feature-settings: "tnum" 1;
+}
+
+/* =========================================================
+   ANALYTICAL PANELS & DATA CARDS
+   ========================================================= */
+
+.panel {
+  margin-bottom: 16px;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border-hairline);
+  background: var(--bg-surface);
+}
+
+.panel-header h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.panel-header span {
+  display: block;
+  margin-top: 1px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.chart-container {
+  width: 100%;
+  height: 220px;
+  padding: 14px 18px 8px;
+}
+
+/* Recharts Clean Institutional Overrides */
+.recharts-cartesian-grid line {
+  stroke: #edf2f7;
+}
+
+.recharts-xAxis text,
+.recharts-yAxis text {
+  fill: #64748b;
+  font-size: 10.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.recharts-bar-rectangle path {
+  fill: #334155;
+  transition: fill 0.15s ease;
+}
+
+.recharts-bar-rectangle:hover path {
+  fill: #0f172a;
+}
+
+.recharts-default-tooltip {
+  background-color: #0f172a !important;
+  border: 1px solid #1e293b !important;
+  border-radius: 4px !important;
+  padding: 6px 10px !important;
+  box-shadow: var(--shadow-dropdown) !important;
+}
+
+.recharts-tooltip-item-name,
+.recharts-tooltip-item-value {
+  color: #f8fafc !important;
+  font-size: 11.5px !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+}
+
+.recharts-tooltip-label {
+  color: #94a3b8 !important;
+  font-size: 10.5px !important;
+  margin-bottom: 3px !important;
+}
+
+/* =========================================================
+   INVESTIGATION FILTER CONTROLS
+   ========================================================= */
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border-hairline);
+  background: var(--bg-surface-subtle);
+}
+
+.search-box {
+  max-width: 360px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-tertiary);
+  transition: border-color 0.12s ease;
+}
+
+.search-box:focus-within {
+  border-color: var(--accent-ink);
+}
+
+.search-box input {
+  width: 100%;
+  border: 0;
+  outline: none;
+  color: var(--text-primary);
+  background: transparent;
+  font-size: 12px;
+}
+
+.search-box input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.filters select {
+  height: 32px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  font-size: 12px;
+  font-weight: 500;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.12s ease;
+}
+
+.filters select:focus {
+  border-color: var(--accent-ink);
+}
+
+/* =========================================================
+   EVIDENCE & RECORD DATA TABLE
+   ========================================================= */
+
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+}
+
+thead {
+  background: #fafbfd;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+th {
+  padding: 9px 14px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-hairline);
+  color: var(--text-primary);
+  vertical-align: middle;
+  line-height: 1.4;
+}
+
+tbody tr:hover {
+  background: #f8fafc;
+}
+
+/* Specific Field Cells */
+.product-cell {
+  min-width: 220px;
+  max-width: 360px;
+  color: var(--text-primary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+td:nth-child(1) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+td:nth-child(4),
+td:nth-child(6) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.country-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-xs);
+  color: var(--badge-neutral-text);
+  background: var(--badge-neutral-bg);
+  border: 1px solid #cbd5e1;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.04em;
+}
+
+/* =========================================================
+   PAGINATION CONTROLS
+   ========================================================= */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 10px 18px;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-hairline);
+}
+
+.pagination button {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  font-size: 11px;
+  font-weight: 600;
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.pagination button:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.pagination span {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* =========================================================
+   RESPONSIVE LAYOUT CALIBRATION
+   ========================================================= */
+
+@media (max-width: 1200px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    height: 100vh;
+    box-shadow: var(--shadow-dropdown);
+  }
+
+  .content {
+    padding: 16px 16px 36px;
+  }
+
+  .topbar {
+    padding: 0 16px;
+  }
+
+  .topbar-right {
+    display: none;
+  }
+
+  .page-heading {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-box {
+    max-width: 100%;
+  }
+
+  .login-card {
+    padding: 28px 20px;
+  }
+}
+===== frontend/src/index.css =====
+/* =========================================================
+   SENTRA-FS BASE NORMALIZATION & TYPOGRAPHIC CORE
+   ========================================================= */
+
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light;
+  color: #121820;
+  background-color: #f7f8fa;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  width: 100%;
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background-color: #f7f8fa;
+  color: #121820;
+}
+
+/* Reset Interactive Form Controls */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+input,
+select {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* Selection State */
+::selection {
+  background-color: #0f172a;
+  color: #ffffff;
+}
+
+/* Accessible Focus States */
+:focus-visible {
+  outline: 1.5px solid #0f172a;
+  outline-offset: 1px;
+}
+===== frontend/src/main.tsx =====
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import './index.css'
+import App from './App.tsx'
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)

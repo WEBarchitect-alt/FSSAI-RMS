@@ -1,0 +1,14 @@
+﻿SOURCE_ID,SOURCE_NAME,SOURCE_TYPE,TOPIC,OFFICIAL_URL,LOCAL_FILE,RETRIEVED_DATE,NOTES
+FDA-001,FDA Importing Human Foods,GUIDANCE,IMPORT_REQUIREMENTS,https://www.fda.gov/industry/importing-fda-regulated-products/importing-human-foods,,2026-09-20,Primary overview for imported human-food requirements
+FDA-002,FDA Import Refusals,REFERENCE,IMPORT_REFUSALS,https://www.fda.gov/industry/fda-import-process/import-refusals,,2026-09-20,Reference for FDA refusal process and refusal records
+FDA-003,FDA Import Alerts,REFERENCE,IMPORT_ALERTS,https://www.fda.gov/industry/actions-enforcement/import-alerts,,2026-09-20,Official import-alert and DWPE reference
+FDA-004,FDA Compliance Policy Guides,GUIDANCE,COMPLIANCE,https://www.fda.gov/inspections-compliance-enforcement-and-criminal-investigations/compliance-manuals/manual-compliance-policy-guides,,2026-09-20,Official FDA compliance policy guidance
+FDA-005,FDA Food Code,REFERENCE,FOOD_SAFETY,https://www.fda.gov/food/fda-food-code,,2026-09-20,Reference material; applicability to imports must be evaluated
+FDA-006,FDA Prior Notice of Imported Foods,GUIDANCE,IMPORT_REQUIREMENTS,https://www.fda.gov/industry/fda-import-process/prior-notice-imported-foods,,2026-09-20,Official prior-notice requirements and guidance
+FDA-007,FDA FSVP Final Rule,REGULATION_GUIDANCE,IMPORT_REQUIREMENTS,https://www.fda.gov/food/food-safety-modernization-act-fsma/fsma-final-rule-foreign-supplier-verification-programs-fsvp-importers-food-humans-and-animals,,2026-09-20,Foreign Supplier Verification Program requirements
+FDA-008,FDA Food Labeling Guide,GUIDANCE,FOOD_LABELING,https://www.fda.gov/regulatory-information/search-fda-guidance-documents/guidance-industry-food-labeling-guide,,2026-09-20,Official food labeling guidance
+source_id,organization,title,official_url,category,access_mode
+US-FDA-CFR-101,US FDA,21 CFR Part 101 Food Labeling,https://www.ecfr.gov/current/title-21/chapter-I/subchapter-B/part-101,regulations,LIVE_URL
+US-FDA-CFR-111,US FDA,21 CFR Part 111 Dietary Supplement cGMP,https://www.ecfr.gov/current/title-21/chapter-I/subchapter-B/part-111,regulations,LIVE_URL
+US-FDA-IA-PORTAL,US FDA,FDA Import Alerts Database (OASIS),https://www.accessdata.fda.gov/scripts/importalerts/,import_alerts,LIVE_URL
+US-FDA-PCB,US FDA,FDA Product Code Builder,https://www.accessdata.fda.gov/scripts/ora/pcb/,metadata,LIVE_URL

@@ -1,0 +1,21 @@
+// JavaScript Document
+
+function pagelimit(type)
+{
+var limit = document.getElementById("limit").value;
+window.location=type+"&limit="+limit;
+}
+
+function getList(cid)
+{
+if(document.getElementById("ulCat_"+cid).style.display=='none')
+{
+document.getElementById("ulCat_"+cid).style.display='block';
+document.getElementById("catimg_"+cid).src="images/icons/minus.png";
+}
+else
+{
+document.getElementById("ulCat_"+cid).style.display='none';
+document.getElementById("catimg_"+cid).src="images/icons/plus.gif";
+}
+}
