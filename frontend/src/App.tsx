@@ -28,8 +28,7 @@ import {
 } from "recharts";
 import "./App.css";
 
-const API = "http://127.0.0.1:8000";
-
+const API = "https://fssai-rms.onrender.com";
 type FdaSummary = {
   total_refusal_events: number;
   unique_countries: number;
