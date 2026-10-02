@@ -5,7 +5,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel
 
-from backend.api.dependencies import get_db, get_current_user
+from backend.api.dependencies import get_db
 
 router = APIRouter(
     prefix="/api/eu",
@@ -53,10 +53,7 @@ class EuPaginationResponse(BaseModel):
     items: List[EuEventItem]
 
 @router.get("/summary", response_model=EuSummaryResponse)
-def get_eu_summary(
-    conn: sqlite3.Connection = Depends(get_db),
-    _current_user: dict = Depends(get_current_user)
-):
+def get_eu_summary(conn: sqlite3.Connection = Depends(get_db)):
     cursor = conn.cursor()
     cursor.execute("""
         SELECT
@@ -84,15 +81,14 @@ def get_eu_summary(
 @router.get("/events", response_model=EuPaginationResponse)
 def get_eu_events(
     page: int = Query(1, ge=1),
-    page_size: int = Query(25, ge=10, le=100),
+    page_size: int = Query(10, ge=1, le=100),
     search: Optional[str] = Query(None),
     origin: Optional[str] = Query(None),
     notifying_country: Optional[str] = Query(None),
     classification: Optional[str] = Query(None),
     risk_decision: Optional[str] = Query(None),
     year: Optional[int] = Query(None),
-    conn: sqlite3.Connection = Depends(get_db),
-    _current_user: dict = Depends(get_current_user)
+    conn: sqlite3.Connection = Depends(get_db)
 ):
     cursor = conn.cursor()
     where_clauses = []
@@ -167,11 +163,7 @@ def get_eu_events(
     )
 
 @router.get("/events/{id}", response_model=EuEventItem)
-def get_eu_event_by_id(
-    id: int,
-    conn: sqlite3.Connection = Depends(get_db),
-    _current_user: dict = Depends(get_current_user)
-):
+def get_eu_event_by_id(id: int, conn: sqlite3.Connection = Depends(get_db)):
     cursor = conn.cursor()
     cursor.execute("""
         SELECT
@@ -186,4 +178,4 @@ def get_eu_event_by_id(
     row = cursor.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="EU border event record not found")
-    return EuEventItem(**dict(row)) 
+    return EuEventItem(**dict(row))
