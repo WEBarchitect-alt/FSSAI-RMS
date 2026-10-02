@@ -261,13 +261,13 @@ function App() {
   }
 
   useEffect(() => {
-    if (token) {
-      loadSummaries();
-      loadFdaEvents();
-      loadEuEvents();
-      loadIndiaRecords();
-    }
-  }, [token]);
+  if (token) {
+    loadSummaries();
+    loadFdaEvents();
+    loadEuEvents();
+    loadIndiaRecords();
+  }
+}, [token]);
 
   useEffect(() => {
     if (token) loadFdaEvents();
